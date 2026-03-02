@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getGrant, updateGrant, updateMilestone, addTransaction, addExpense, addVote, getGrantStats } from '../utils/store';
-import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, createPaymentTxn, createNoteTxn, submitSignedTxn, getBalance, isValidAddress, signAndSubmitTxn, LORA_BASE } from '../utils/algorand';
+import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, createPaymentTxn, createNoteTxn, submitSignedTxn, getBalance, isValidAddress, sendAlgoFromTreasury, TREASURY_ADDRESS, LORA_BASE } from '../utils/algorand';
 import { peraWallet } from '../utils/wallet';
 
 export default function GrantDetail({ user, walletAddress }) {
@@ -18,18 +18,15 @@ export default function GrantDetail({ user, walletAddress }) {
     const [fundAmount, setFundAmount] = useState('');
     const [processing, setProcessing] = useState(false);
     const [liveBalance, setLiveBalance] = useState(null);
-    const [mnemonic, setMnemonic] = useState('');
     const [lastTxnId, setLastTxnId] = useState(null);
 
     const refresh = () => setGrant(getGrant(id));
     useEffect(() => { refresh(); }, [id]);
 
-    // Fetch live balance when wallet is connected
+    // Fetch live treasury balance
     useEffect(() => {
-        if (walletAddress) {
-            getBalance(walletAddress).then(setLiveBalance).catch(() => { });
-        }
-    }, [walletAddress]);
+        getBalance(TREASURY_ADDRESS).then(setLiveBalance).catch(() => { });
+    }, []);
 
     const showToastMsg = (type, message) => {
         setToast({ type, message });
@@ -95,18 +92,15 @@ export default function GrantDetail({ user, walletAddress }) {
     // ======== SPONSOR: Release Funds — REAL ON-CHAIN ========
     const handleReleaseFunds = async (milestone) => {
         if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
-        if (!mnemonic.trim()) return showToastMsg('error', '🔑 Enter your 25-word mnemonic to sign the transaction');
         setProcessing(true);
         try {
             const amount = parseFloat(milestone.amount);
             const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : walletAddress;
-            const txn = await createPaymentTxn(
-                walletAddress,
+            const txnId = await sendAlgoFromTreasury(
                 recipient,
                 amount,
                 `GRANTCHAIN MILESTONE: ${milestone.name} | Grant: ${grant.name}`
             );
-            const txnId = await signAndSubmitTxn(txn, mnemonic);
             setLastTxnId(txnId);
 
             updateMilestone(grant.id, milestone.id, {
@@ -118,48 +112,43 @@ export default function GrantDetail({ user, walletAddress }) {
                 type: 'release',
                 amount: String(amount),
                 note: `MILESTONE: ${milestone.name}`,
-                from: walletAddress,
+                from: TREASURY_ADDRESS,
                 to: recipient,
                 txnId,
                 onChain: true,
                 timestamp: new Date().toISOString(),
             });
             refresh();
-            showToastMsg('success', `💸 ${amount} ALGO sent on-chain! Txn: ${shortAddress(txnId)}`);
+            showToastMsg('success', `💸 ${amount} ALGO released on-chain! Txn: ${shortAddress(txnId)}`);
         } catch (err) {
             console.error('Release funds error:', err);
-            showToastMsg('error', `❌ Transaction failed: ${err.message || 'Check mnemonic or balance'}`);
+            showToastMsg('error', `❌ Transaction failed: ${err.message || 'Check treasury balance'}`);
         }
         setProcessing(false);
     };
 
     // ======== SPONSOR: Fund Grant — REAL ON-CHAIN ========
     const handleFundGrant = async () => {
-        if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
-        if (!mnemonic.trim()) return showToastMsg('error', '🔑 Enter your 25-word mnemonic to sign the transaction');
         const amount = parseFloat(fundAmount);
         if (!amount || amount <= 0) return showToastMsg('error', 'Enter a valid funding amount');
+        // Determine recipient
+        const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : (walletAddress || TREASURY_ADDRESS);
         setProcessing(true);
         try {
-            const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : walletAddress;
-            console.log('[GrantChain] Fund:', amount, 'ALGO from', walletAddress, 'to', recipient);
-
-            const txn = await createPaymentTxn(
-                walletAddress,
+            console.log('[GrantChain] Fund:', amount, 'ALGO from treasury to', recipient);
+            const txnId = await sendAlgoFromTreasury(
                 recipient,
                 amount,
                 `GRANTCHAIN FUND: ${grant.name} | Amount: ${amount} ALGO`
             );
-            console.log('[GrantChain] Signing with mnemonic...');
-            const txnId = await signAndSubmitTxn(txn, mnemonic);
-            console.log('[GrantChain] ✅ Transaction confirmed! TxnID:', txnId);
+            console.log('[GrantChain] ✅ Confirmed! TxnID:', txnId);
             setLastTxnId(txnId);
 
             addTransaction(grant.id, {
                 type: 'fund',
                 amount: String(amount),
                 note: `Grant funding: ${amount} ALGO`,
-                from: walletAddress,
+                from: TREASURY_ADDRESS,
                 to: recipient,
                 txnId,
                 onChain: true,
@@ -171,14 +160,12 @@ export default function GrantDetail({ user, walletAddress }) {
             setShowFundModal(false);
             setFundAmount('');
             showToastMsg('success', `💰 ${amount} ALGO funded on-chain! Txn: ${shortAddress(txnId)}`);
-            getBalance(walletAddress).then(setLiveBalance).catch(() => { });
+            getBalance(TREASURY_ADDRESS).then(setLiveBalance).catch(() => { });
         } catch (err) {
             console.error('[GrantChain] Fund error:', err);
             const msg = err.message || 'Unknown error';
-            if (msg.includes('mnemonic') || msg.includes('word')) {
-                showToastMsg('error', '❌ Invalid mnemonic. Must be 25 words from your Pera Wallet.');
-            } else if (msg.includes('overspend') || msg.includes('balance')) {
-                showToastMsg('error', '❌ Insufficient ALGO balance for this transaction');
+            if (msg.includes('overspend') || msg.includes('balance')) {
+                showToastMsg('error', '❌ Treasury has insufficient ALGO. Fund it at bank.testnet.algorand.network');
             } else {
                 showToastMsg('error', `❌ Funding failed: ${msg}`);
             }
@@ -366,23 +353,14 @@ export default function GrantDetail({ user, walletAddress }) {
                             <input type="number" className="form-control" value={fundAmount} onChange={e => setFundAmount(e.target.value)}
                                 placeholder="1" min="0.1" step="0.1" />
                         </div>
-                        <div className="form-group">
-                            <label>🔑 Mnemonic (25 words) *</label>
-                            <textarea className="form-control" value={mnemonic} onChange={e => setMnemonic(e.target.value)}
-                                placeholder="Enter your 25-word Algorand mnemonic phrase to sign this transaction..."
-                                rows={3} style={{ fontSize: '0.82rem', fontFamily: 'monospace' }} />
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                                🛡️ Your mnemonic is never stored or sent anywhere — only used locally to sign this transaction
-                            </div>
-                        </div>
                         {lastTxnId && (
                             <div style={{ padding: '8px 12px', background: 'var(--success-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--success)', marginBottom: 12 }}>
                                 ✅ Last Txn: <a href={`${LORA_BASE}/transaction/${lastTxnId}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-hover)', wordBreak: 'break-all' }}>{lastTxnId}</a>
                             </div>
                         )}
                         <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn btn-primary" onClick={handleFundGrant} disabled={processing || !mnemonic.trim()}>
-                                {processing ? '⏳ Signing & Submitting...' : '💰 Sign & Send ALGO'}
+                            <button className="btn btn-primary" onClick={handleFundGrant} disabled={processing}>
+                                {processing ? '⏳ Sending...' : '💰 Send ALGO'}
                             </button>
                             <button className="btn btn-secondary" onClick={() => setShowFundModal(false)}>Cancel</button>
                         </div>
@@ -404,10 +382,7 @@ export default function GrantDetail({ user, walletAddress }) {
                         <button className="btn btn-secondary" onClick={() => setShowExpenseModal(true)}>📝 Log Expense</button>
                     )}
                     {user.role === 'sponsor' && (
-                        <button className="btn btn-primary" onClick={() => {
-                            if (!walletAddress) { showToastMsg('error', '🔗 Connect your Pera Wallet first!'); return; }
-                            setShowFundModal(true);
-                        }}>💰 Fund Grant</button>
+                        <button className="btn btn-primary" onClick={() => setShowFundModal(true)}>💰 Fund Grant</button>
                     )}
                 </div>
             </div>
