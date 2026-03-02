@@ -66,58 +66,66 @@ export default function CreateGrant({ user, walletAddress }) {
         if (milestones.some(m => !m.name.trim())) return showToast('error', 'All milestones need a name');
         if (totalPercentage !== 100) return showToast('error', `Milestone percentages must total 100% (currently ${totalPercentage}%)`);
 
-        // Generate escrow address
-        let escrowAddress = '';
-        let multisigParams = null;
-        const addresses = [form.sponsorWallet, form.adminWallet, form.teamWallet].filter(a => a && a.length >= 58);
+        try {
+            // Generate escrow address — deduplicate wallet addresses for multisig
+            let escrowAddress = '';
+            let multisigParams = null;
+            const uniqueAddresses = [...new Set(
+                [form.sponsorWallet, form.adminWallet, form.teamWallet].filter(a => a && a.length >= 58)
+            )];
 
-        if (addresses.length >= 2) {
-            try {
-                const msig = createMultisigAddress(addresses, 2);
-                escrowAddress = msig.address;
-                multisigParams = msig.params;
-            } catch {
+            if (uniqueAddresses.length >= 2) {
+                try {
+                    const msig = createMultisigAddress(uniqueAddresses, 2);
+                    escrowAddress = msig.address;
+                    multisigParams = msig.params;
+                } catch {
+                    escrowAddress = `ESCROW_${Date.now()}_${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+                }
+            } else {
                 escrowAddress = `ESCROW_${Date.now()}_${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
             }
-        } else {
-            escrowAddress = `ESCROW_${Date.now()}_${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+
+            const totalFunding = parseFloat(form.totalFunding);
+            const formattedMilestones = milestones.map((m, i) => ({
+                name: m.name || `Milestone ${i + 1}`,
+                description: m.description,
+                percentage: Number(m.percentage),
+                amount: ((Number(m.percentage) / 100) * totalFunding).toFixed(2),
+            }));
+
+            const grantData = {
+                ...form,
+                escrowAddress,
+                multisigParams,
+                milestones: formattedMilestones,
+            };
+
+            // Team-created grants are proposals awaiting sponsor funding
+            if (isTeam) {
+                grantData.status = 'proposed';
+                grantData.proposedBy = user.name;
+            } else {
+                // Sponsor-created grants get an initial (off-chain) funding record
+                grantData.transactions = [{
+                    type: 'fund',
+                    amount: String(totalFunding),
+                    note: `Initial grant funding by ${user.name}`,
+                    from: form.sponsorWallet ? form.sponsorWallet.slice(0, 12) + '...' : user.name,
+                    to: escrowAddress.slice(0, 12) + '...',
+                    txnId: null,
+                    timestamp: new Date().toISOString(),
+                }];
+            }
+
+            const grant = createGrant(grantData);
+
+            showToast('success', isTeam ? `Proposal "${grant.name}" submitted! Waiting for sponsor funding.` : `Grant "${grant.name}" created! Redirecting...`);
+            setTimeout(() => navigate(`/grant/${grant.id}`), 1500);
+        } catch (err) {
+            console.error('Grant creation error:', err);
+            showToast('error', `Failed to create grant: ${err.message || 'Unknown error'}`);
         }
-
-        const totalFunding = parseFloat(form.totalFunding);
-        const formattedMilestones = milestones.map((m, i) => ({
-            name: m.name || `Milestone ${i + 1}`,
-            description: m.description,
-            percentage: Number(m.percentage),
-            amount: ((Number(m.percentage) / 100) * totalFunding).toFixed(2),
-        }));
-
-        const grantData = {
-            ...form,
-            escrowAddress,
-            multisigParams,
-            milestones: formattedMilestones,
-        };
-
-        // Team-created grants are proposals awaiting sponsor funding
-        if (isTeam) {
-            grantData.status = 'proposed';
-            grantData.proposedBy = user.name;
-        } else {
-            // Sponsor-created grants get an initial (off-chain) funding record
-            grantData.transactions = [{
-                type: 'fund',
-                amount: String(totalFunding),
-                note: `Initial grant funding by ${user.name}`,
-                from: form.sponsorWallet ? form.sponsorWallet.slice(0, 12) + '...' : user.name,
-                to: escrowAddress.slice(0, 12) + '...',
-                txnId: null,
-            }];
-        }
-
-        const grant = createGrant(grantData);
-
-        showToast('success', isTeam ? `Proposal "${grant.name}" submitted! Waiting for sponsor funding.` : `Grant "${grant.name}" created! Redirecting...`);
-        setTimeout(() => navigate(`/grant/${grant.id}`), 1500);
     };
 
     return (

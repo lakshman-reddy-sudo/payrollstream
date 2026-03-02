@@ -34,7 +34,8 @@ export function createMultisigAddress(addresses, threshold = 2) {
         addrs: addresses,
     };
     const multisigAddr = algosdk.multisigAddress(msigParams);
-    return { address: multisigAddr, params: msigParams };
+    // algosdk v3 returns an Address object — convert to string
+    return { address: String(multisigAddr), params: msigParams };
 }
 
 /**
@@ -54,10 +55,12 @@ export async function getSuggestedParams() {
  */
 export async function createPaymentTxn(from, to, amountInAlgo, note = '') {
     const suggestedParams = await getSuggestedParams();
+    // algosdk v3: amount must be number or bigint in microalgos
+    const microAlgos = Math.round(amountInAlgo * 1_000_000);
     return algosdk.makePaymentTxnWithSuggestedParamsFromObject({
         from,
         to,
-        amount: algosdk.algosToMicroalgos(amountInAlgo),
+        amount: microAlgos,
         note: new TextEncoder().encode(note),
         suggestedParams,
     });
@@ -86,9 +89,11 @@ export async function createNoteTxn(address, note) {
  * @returns {Promise<string>} - the transaction ID
  */
 export async function submitSignedTxn(signedTxn) {
-    const { txid } = await algodClient.sendRawTransaction(signedTxn).do();
+    const response = await algodClient.sendRawTransaction(signedTxn).do();
+    // algosdk v3: response may have txid as txId or txid
+    const txid = response.txid || response.txId || response;
     await algosdk.waitForConfirmation(algodClient, txid, 4);
-    return txid;
+    return typeof txid === 'string' ? txid : String(txid);
 }
 
 /**
@@ -99,8 +104,11 @@ export async function submitSignedTxn(signedTxn) {
 export async function getBalance(address) {
     try {
         const accountInfo = await algodClient.accountInformation(address).do();
-        return algosdk.microalgosToAlgos(accountInfo.amount);
-    } catch {
+        // algosdk v3: amount may be bigint — convert to Number
+        const microAlgos = Number(accountInfo.amount || accountInfo['amount'] || 0);
+        return microAlgos / 1_000_000;
+    } catch (err) {
+        console.error('getBalance error:', err);
         return 0;
     }
 }

@@ -139,8 +139,8 @@ export default function GrantDetail({ user, walletAddress }) {
         if (!amount || amount <= 0) return showToastMsg('error', 'Enter a valid funding amount');
         setProcessing(true);
         try {
-            // For demo: send ALGO to team wallet directly (or escrow if configured)
-            const recipient = grant.escrowAddress || grant.teamWallet || walletAddress;
+            // Send directly to team wallet (multisig escrow needs min balance setup)
+            const recipient = grant.teamWallet || walletAddress;
             const txn = await createPaymentTxn(
                 walletAddress,
                 recipient,
@@ -158,6 +158,7 @@ export default function GrantDetail({ user, walletAddress }) {
                 to: recipient,
                 txnId,
                 onChain: true,
+                timestamp: new Date().toISOString(),
             });
             const newTotal = parseFloat(grant.totalFunding || 0) + amount;
             updateGrant(grant.id, { totalFunding: String(newTotal), status: 'active' });
@@ -341,7 +342,21 @@ export default function GrantDetail({ user, walletAddress }) {
                         </div>
                         {liveBalance !== null && (
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
-                                Your balance: <strong style={{ color: 'var(--success)' }}>{liveBalance.toFixed(4)} ALGO</strong>
+                                Your balance: <strong style={{ color: liveBalance > 0 ? 'var(--success)' : 'var(--danger)' }}>{liveBalance.toFixed(4)} ALGO</strong>
+                                {liveBalance === 0 && (
+                                    <div style={{ marginTop: 6, fontSize: '0.8rem' }}>
+                                        ⚠️ You need test ALGO!{' '}
+                                        <a href="https://bank.testnet.algorand.network/" target="_blank" rel="noreferrer"
+                                            style={{ color: 'var(--accent-hover)', textDecoration: 'underline' }}>
+                                            Get free TestNet ALGO →
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {grant.teamWallet && (
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 12, padding: '6px 10px', background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)' }}>
+                                Sending to: <span className="txn-hash">{shortAddress(grant.teamWallet)}</span> ({grant.teamName || 'Team'})
                             </div>
                         )}
                         <div className="form-group">

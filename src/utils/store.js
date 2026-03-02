@@ -78,11 +78,12 @@ export function createGrant(grantData) {
     const data = getData();
     const grant = {
         id: data.nextId,
+        status: 'active',
+        transactions: [],
+        expenses: [],
         ...grantData,
         createdAt: new Date().toISOString(),
-        status: 'active',
         milestones: (grantData.milestones || []).map((m, i) => ({
-            ...m,
             id: i + 1,
             status: 'pending',
             submittedAt: null,
@@ -92,12 +93,11 @@ export function createGrant(grantData) {
             approvedBy: null,
             fundedAt: null,
             txnId: null,
-            votes: [],            // DAO voting
+            votes: [],
             rejectedAt: null,
             rejectionNote: null,
+            ...m,
         })),
-        transactions: [],
-        expenses: [],           // Team expense logs
     };
     data.grants.push(grant);
     data.nextId += 1;
