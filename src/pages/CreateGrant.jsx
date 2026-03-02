@@ -22,18 +22,7 @@ export default function CreateGrant({ user, walletAddress }) {
     ]);
     const [toast, setToast] = useState(null);
 
-    if (user?.role === 'admin') {
-        return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="text-center">
-                    <span className="material-symbols-outlined text-6xl text-gray-600 mb-4 block">block</span>
-                    <h3 className="text-xl font-bold text-gray-400 mb-2">Access Restricted</h3>
-                    <p className="text-gray-500 mb-6">Admins review grants. <strong className="text-white">Sponsors</strong> create grants and <strong className="text-white">Teams</strong> submit proposals.</p>
-                    <button className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-medium" onClick={() => navigate('/dashboard')}>Back to Dashboard</button>
-                </div>
-            </div>
-        );
-    }
+    const isAdmin = user?.role === 'admin';
 
     const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
     const addMilestone = () => setMilestones([...milestones, { name: '', description: '', percentage: 0 }]);

@@ -62,16 +62,14 @@ function NavBar({ user, walletAddress, onConnect, onDisconnect, onLogout }) {
                 {link.label}
               </Link>
             ))}
-            {(user.role === 'sponsor' || user.role === 'admin') && (
-              <Link to="/create"
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all no-underline ${isActive('/create')
-                  ? 'bg-white/10 text-white border border-white/10'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}>
-                <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                Create Grant
-              </Link>
-            )}
+            <Link to="/create"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all no-underline ${isActive('/create')
+                ? 'bg-white/10 text-white border border-white/10'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}>
+              <span className="material-symbols-outlined text-[18px]">add_circle</span>
+              {user.role === 'team' ? 'Submit Proposal' : 'Create Grant'}
+            </Link>
           </div>
 
           {/* Right Actions */}
