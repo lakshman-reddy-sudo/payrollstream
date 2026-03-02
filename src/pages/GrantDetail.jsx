@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getGrant, updateGrant, updateMilestone, addTransaction, addExpense, addVote, getGrantStats } from '../utils/store';
-import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, createPaymentTxn, createNoteTxn, submitSignedTxn, getBalance, isValidAddress, LORA_BASE } from '../utils/algorand';
+import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, getBalance, isValidAddress, sendFromApp, APP_ADDRESS, LORA_BASE } from '../utils/algorand';
 import { peraWallet } from '../utils/wallet';
 
 export default function GrantDetail({ user, walletAddress }) {
@@ -23,12 +23,10 @@ export default function GrantDetail({ user, walletAddress }) {
     const refresh = () => setGrant(getGrant(id));
     useEffect(() => { refresh(); }, [id]);
 
-    // Fetch wallet balance
+    // Fetch app account balance
     useEffect(() => {
-        if (walletAddress) {
-            getBalance(walletAddress).then(setLiveBalance).catch(() => { });
-        }
-    }, [walletAddress]);
+        getBalance(APP_ADDRESS).then(setLiveBalance).catch(() => { });
+    }, []);
 
     const showToastMsg = (type, message) => {
         setToast({ type, message });
@@ -91,70 +89,52 @@ export default function GrantDetail({ user, walletAddress }) {
         showToastMsg('error', `❌ "${milestone.name}" rejected. Team can resubmit.`);
     };
 
-    // ======== SPONSOR: Release Funds — REAL ON-CHAIN via Pera ========
+    // ======== SPONSOR: Release Funds — REAL ON-CHAIN ========
     const handleReleaseFunds = async (milestone) => {
-        if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
         setProcessing(true);
         try {
-            const sender = walletAddress;
             const amount = parseFloat(milestone.amount);
-            const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : sender;
-            const txn = await createPaymentTxn(
-                sender, recipient, amount,
+            const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : APP_ADDRESS;
+            const txnId = await sendFromApp(
+                recipient, amount,
                 `GRANTCHAIN MILESTONE: ${milestone.name} | Grant: ${grant.name}`
             );
-            const signedTxns = await peraWallet.signTransaction([[{ txn }]]);
-            const txnId = await submitSignedTxn(signedTxns[0]);
             setLastTxnId(txnId);
-
             updateMilestone(grant.id, milestone.id, {
                 status: 'funded', fundedAt: new Date().toISOString(), txnId,
             });
             addTransaction(grant.id, {
                 type: 'release', amount: String(amount),
                 note: `MILESTONE: ${milestone.name}`,
-                from: sender, to: recipient, txnId, onChain: true,
+                from: APP_ADDRESS, to: recipient, txnId, onChain: true,
                 timestamp: new Date().toISOString(),
             });
             refresh();
             showToastMsg('success', `💸 ${amount} ALGO released! Txn: ${shortAddress(txnId)}`);
+            getBalance(APP_ADDRESS).then(setLiveBalance).catch(() => { });
         } catch (err) {
             console.error('Release error:', err);
-            const msg = err.message || '';
-            if (msg.includes('not initialized') || msg.includes('connector')) {
-                showToastMsg('error', '🔗 Pera session expired. Disconnect and reconnect your wallet.');
-            } else {
-                showToastMsg('error', `❌ ${msg || 'Transaction failed'}`);
-            }
+            showToastMsg('error', `❌ ${err.message || 'Transaction failed'}`);
         }
         setProcessing(false);
     };
 
-    // ======== SPONSOR: Fund Grant — REAL ON-CHAIN via Pera ========
+    // ======== SPONSOR: Fund Grant — REAL ON-CHAIN ========
     const handleFundGrant = async () => {
-        if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
         const amount = parseFloat(fundAmount);
         if (!amount || amount <= 0) return showToastMsg('error', 'Enter a valid funding amount');
-        // Save address locally in case React state changes during async
-        const sender = walletAddress;
-        const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : sender;
+        const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : APP_ADDRESS;
         setProcessing(true);
         try {
-            // Step 1: Create transaction
-            const txn = await createPaymentTxn(
-                sender, recipient, amount,
+            const txnId = await sendFromApp(
+                recipient, amount,
                 `GRANTCHAIN FUND: ${grant.name} | Amount: ${amount} ALGO`
             );
-            // Step 2: Sign with Pera (don't disconnect — it kills the session)
-            const signedTxns = await peraWallet.signTransaction([[{ txn }]]);
-            // Step 3: Submit to TestNet
-            const txnId = await submitSignedTxn(signedTxns[0]);
             setLastTxnId(txnId);
-
             addTransaction(grant.id, {
                 type: 'fund', amount: String(amount),
                 note: `Grant funding: ${amount} ALGO`,
-                from: sender, to: recipient, txnId, onChain: true,
+                from: APP_ADDRESS, to: recipient, txnId, onChain: true,
                 timestamp: new Date().toISOString(),
             });
             const newTotal = parseFloat(grant.totalFunding || 0) + amount;
@@ -163,19 +143,10 @@ export default function GrantDetail({ user, walletAddress }) {
             setShowFundModal(false);
             setFundAmount('');
             showToastMsg('success', `💰 ${amount} ALGO funded on-chain! Txn: ${shortAddress(txnId)}`);
-            getBalance(sender).then(setLiveBalance).catch(() => { });
+            getBalance(APP_ADDRESS).then(setLiveBalance).catch(() => { });
         } catch (err) {
             console.error('Fund error:', err);
-            const msg = err.message || 'Unknown error';
-            if (msg.includes('not initialized') || msg.includes('connector')) {
-                showToastMsg('error', '🔗 Pera session expired. Click the X next to your wallet, then reconnect.');
-            } else if (msg.includes('overspend')) {
-                showToastMsg('error', '❌ Not enough ALGO in your wallet');
-            } else if (msg.includes('rejected') || msg.includes('cancelled')) {
-                showToastMsg('error', '❌ Transaction cancelled');
-            } else {
-                showToastMsg('error', `❌ ${msg}`);
-            }
+            showToastMsg('error', `❌ ${err.message || 'Transaction failed'}`);
         }
         setProcessing(false);
     };
@@ -341,13 +312,13 @@ export default function GrantDetail({ user, walletAddress }) {
             {showFundModal && (
                 <div className="modal-overlay" onClick={() => setShowFundModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
-                        <h2>💰 Fund Grant (Real TestNet)</h2>
+                        <h2>💰 Fund Grant</h2>
                         <div style={{ padding: '8px 12px', background: 'var(--info-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--info)', marginBottom: 16 }}>
-                            ⛓️ Your Pera Wallet will sign the transaction. ALGO sent on Algorand TestNet.
+                            ⛓️ Real ALGO sent on Algorand TestNet — verifiable on <a href={`${LORA_BASE}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-hover)' }}>Lora</a>
                         </div>
                         {liveBalance !== null && (
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
-                                Your balance: <strong style={{ color: liveBalance > 0 ? 'var(--success)' : 'var(--danger)' }}>{liveBalance.toFixed(4)} ALGO</strong>
+                                App balance: <strong style={{ color: liveBalance > 0 ? 'var(--success)' : 'var(--danger)' }}>{liveBalance.toFixed(4)} ALGO</strong>
                             </div>
                         )}
                         {grant.teamWallet && (
@@ -389,10 +360,7 @@ export default function GrantDetail({ user, walletAddress }) {
                         <button className="btn btn-secondary" onClick={() => setShowExpenseModal(true)}>📝 Log Expense</button>
                     )}
                     {user.role === 'sponsor' && (
-                        <button className="btn btn-primary" onClick={() => {
-                            if (!walletAddress) { showToastMsg('error', '🔗 Connect your Pera Wallet first!'); return; }
-                            setShowFundModal(true);
-                        }}>💰 Fund Grant</button>
+                        <button className="btn btn-primary" onClick={() => setShowFundModal(true)}>💰 Fund Grant</button>
                     )}
                 </div>
             </div>
