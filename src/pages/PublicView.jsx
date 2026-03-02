@@ -134,8 +134,11 @@ export default function PublicView() {
                                                         <span style={{ fontWeight: 600, color: 'var(--accent-hover)' }}>{m.amount} ALGO</span>
                                                         {m.txnId && (
                                                             <a href={getExplorerTxnUrl(m.txnId)} target="_blank" rel="noreferrer"
-                                                                style={{ fontSize: '0.75rem', color: 'var(--success)', textDecoration: 'none' }}>
-                                                                ✅ {shortAddress(m.txnId)} ↗
+                                                                style={{ fontSize: '0.75rem', color: 'var(--success)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--success-bg)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.3)' }}>
+                                                                <span>⛓️</span>
+                                                                <span style={{ fontWeight: 600 }}>Verified</span>
+                                                                <span className="txn-hash">{shortAddress(m.txnId)}</span>
+                                                                <span>↗</span>
                                                             </a>
                                                         )}
                                                     </div>

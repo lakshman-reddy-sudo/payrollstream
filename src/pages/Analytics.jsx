@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getGrants, getGrantStats } from '../utils/store';
+import { shortAddress, getExplorerTxnUrl } from '../utils/algorand';
 
 const COLORS = {
     funded: '#8b5cf6',
@@ -194,7 +195,7 @@ export default function Analytics({ user }) {
                 ) : (
                     <div style={{ overflow: 'auto' }}>
                         <table className="txn-table">
-                            <thead><tr><th>Grant</th><th>Type</th><th>Amount</th><th>Note</th><th>Date</th></tr></thead>
+                            <thead><tr><th>Grant</th><th>Type</th><th>Amount</th><th>Note</th><th>Date</th><th>Algorand Txn</th></tr></thead>
                             <tbody>
                                 {allTransactions.slice(0, 20).map((txn, i) => (
                                     <tr key={i}>
@@ -205,6 +206,14 @@ export default function Analytics({ user }) {
                                         <td style={{ fontWeight: 600 }}>{txn.type === 'expense' ? '0' : txn.amount} ALGO</td>
                                         <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.note}</td>
                                         <td>{new Date(txn.timestamp).toLocaleDateString()}</td>
+                                        <td>
+                                            {txn.txnId ? (
+                                                <a href={getExplorerTxnUrl(txn.txnId)} target="_blank" rel="noreferrer"
+                                                    style={{ fontSize: '0.78rem', color: 'var(--success)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--success-bg)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.3)' }}>
+                                                    ⛓️ <span style={{ fontWeight: 600 }}>Verified</span> <span className="txn-hash">{shortAddress(txn.txnId)}</span> ↗
+                                                </a>
+                                            ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

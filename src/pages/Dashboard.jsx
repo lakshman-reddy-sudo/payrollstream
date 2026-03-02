@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getGrants, getGrantStats, seedDemoData } from '../utils/store';
-import { shortAddress } from '../utils/algorand';
+import { getGrants, getGrantStats } from '../utils/store';
+import { shortAddress, getExplorerTxnUrl } from '../utils/algorand';
 
 export default function Dashboard({ user, walletAddress }) {
     const [grants, setGrants] = useState([]);
 
     useEffect(() => {
-        seedDemoData();
         setGrants(getGrants());
     }, []);
 
@@ -212,7 +211,14 @@ export default function Dashboard({ user, walletAddress }) {
                                             </td>
                                             <td>{txn.note}</td>
                                             <td>{new Date(txn.timestamp).toLocaleDateString()}</td>
-                                            <td><span className="txn-hash">{txn.txnId ? shortAddress(txn.txnId) : '—'}</span></td>
+                                            <td>
+                                                {txn.txnId ? (
+                                                    <a href={getExplorerTxnUrl(txn.txnId)} target="_blank" rel="noreferrer"
+                                                        style={{ fontSize: '0.78rem', color: 'var(--success)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--success-bg)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.3)' }}>
+                                                        ⛓️ <span style={{ fontWeight: 600 }}>Verified</span> <span className="txn-hash">{shortAddress(txn.txnId)}</span> ↗
+                                                    </a>
+                                                ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Off-chain</span>}
+                                            </td>
                                         </tr>
                                     ))}
                             </tbody>

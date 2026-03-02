@@ -485,9 +485,11 @@ export default function GrantDetail({ user, walletAddress }) {
                                 )}
                                 {m.status === 'funded' && m.txnId && (
                                     <a href={getExplorerTxnUrl(m.txnId)} target="_blank" rel="noreferrer"
-                                        style={{ fontSize: '0.8rem', color: 'var(--accent-hover)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <span className="txn-hash">{shortAddress(m.txnId)}</span>
-                                        <span style={{ fontSize: '0.7rem', background: 'var(--success-bg)', color: 'var(--success)', padding: '2px 6px', borderRadius: 4 }}>Verified ↗</span>
+                                        style={{ fontSize: '0.82rem', color: 'var(--success)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, background: 'var(--success-bg)', padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.3)' }}>
+                                        <span>⛓️</span>
+                                        <span style={{ fontWeight: 600 }}>Verified on Algorand TestNet</span>
+                                        <span className="txn-hash" style={{ fontSize: '0.75rem' }}>{shortAddress(m.txnId)}</span>
+                                        <span style={{ fontSize: '0.7rem' }}>↗</span>
                                     </a>
                                 )}
                             </div>
