@@ -96,16 +96,13 @@ export default function GrantDetail({ user, walletAddress }) {
         if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
         setProcessing(true);
         try {
+            const sender = walletAddress;
             const amount = parseFloat(milestone.amount);
-            const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : walletAddress;
+            const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : sender;
             const txn = await createPaymentTxn(
-                walletAddress, recipient, amount,
+                sender, recipient, amount,
                 `GRANTCHAIN MILESTONE: ${milestone.name} | Grant: ${grant.name}`
             );
-            // Force fresh Pera connection for signing
-            try { await peraWallet.disconnect(); } catch (_) { }
-            const accts = await peraWallet.connect();
-            if (!accts.length) throw new Error('No wallet connected');
             const signedTxns = await peraWallet.signTransaction([[{ txn }]]);
             const txnId = await submitSignedTxn(signedTxns[0]);
             setLastTxnId(txnId);
@@ -116,14 +113,19 @@ export default function GrantDetail({ user, walletAddress }) {
             addTransaction(grant.id, {
                 type: 'release', amount: String(amount),
                 note: `MILESTONE: ${milestone.name}`,
-                from: walletAddress, to: recipient, txnId, onChain: true,
+                from: sender, to: recipient, txnId, onChain: true,
                 timestamp: new Date().toISOString(),
             });
             refresh();
             showToastMsg('success', `💸 ${amount} ALGO released! Txn: ${shortAddress(txnId)}`);
         } catch (err) {
             console.error('Release error:', err);
-            showToastMsg('error', `❌ ${err.message || 'Transaction failed'}`);
+            const msg = err.message || '';
+            if (msg.includes('not initialized') || msg.includes('connector')) {
+                showToastMsg('error', '🔗 Pera session expired. Disconnect and reconnect your wallet.');
+            } else {
+                showToastMsg('error', `❌ ${msg || 'Transaction failed'}`);
+            }
         }
         setProcessing(false);
     };
@@ -133,25 +135,26 @@ export default function GrantDetail({ user, walletAddress }) {
         if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
         const amount = parseFloat(fundAmount);
         if (!amount || amount <= 0) return showToastMsg('error', 'Enter a valid funding amount');
-        const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : walletAddress;
+        // Save address locally in case React state changes during async
+        const sender = walletAddress;
+        const recipient = isValidAddress(grant.teamWallet) ? grant.teamWallet : sender;
         setProcessing(true);
         try {
+            // Step 1: Create transaction
             const txn = await createPaymentTxn(
-                walletAddress, recipient, amount,
+                sender, recipient, amount,
                 `GRANTCHAIN FUND: ${grant.name} | Amount: ${amount} ALGO`
             );
-            // Force fresh Pera connection for signing
-            try { await peraWallet.disconnect(); } catch (_) { }
-            const accts = await peraWallet.connect();
-            if (!accts.length) throw new Error('No wallet connected');
+            // Step 2: Sign with Pera (don't disconnect — it kills the session)
             const signedTxns = await peraWallet.signTransaction([[{ txn }]]);
+            // Step 3: Submit to TestNet
             const txnId = await submitSignedTxn(signedTxns[0]);
             setLastTxnId(txnId);
 
             addTransaction(grant.id, {
                 type: 'fund', amount: String(amount),
                 note: `Grant funding: ${amount} ALGO`,
-                from: walletAddress, to: recipient, txnId, onChain: true,
+                from: sender, to: recipient, txnId, onChain: true,
                 timestamp: new Date().toISOString(),
             });
             const newTotal = parseFloat(grant.totalFunding || 0) + amount;
@@ -160,12 +163,16 @@ export default function GrantDetail({ user, walletAddress }) {
             setShowFundModal(false);
             setFundAmount('');
             showToastMsg('success', `💰 ${amount} ALGO funded on-chain! Txn: ${shortAddress(txnId)}`);
-            getBalance(walletAddress).then(setLiveBalance).catch(() => { });
+            getBalance(sender).then(setLiveBalance).catch(() => { });
         } catch (err) {
             console.error('Fund error:', err);
             const msg = err.message || 'Unknown error';
-            if (msg.includes('overspend')) {
+            if (msg.includes('not initialized') || msg.includes('connector')) {
+                showToastMsg('error', '🔗 Pera session expired. Click the X next to your wallet, then reconnect.');
+            } else if (msg.includes('overspend')) {
                 showToastMsg('error', '❌ Not enough ALGO in your wallet');
+            } else if (msg.includes('rejected') || msg.includes('cancelled')) {
+                showToastMsg('error', '❌ Transaction cancelled');
             } else {
                 showToastMsg('error', `❌ ${msg}`);
             }
