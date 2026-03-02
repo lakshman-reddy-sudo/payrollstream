@@ -1,169 +1,106 @@
-# 🔗 GrantChain — Transparent Grant & Fund Tracking on Algorand
+# 🔗 GrantChain — Transparent Fund Tracking on Algorand
 
-> A blockchain-based grant management system that ensures transparent, milestone-based allocation and utilization of student project funds using the Algorand TestNet.
+**GrantChain** is a milestone-based grant management platform built on the Algorand blockchain. It provides transparent, verifiable, and role-based fund tracking for grants — from creation to completion.
 
-**🌐 Live Demo:** [lakshman-reddy-sudo.github.io/grant-tracker](https://lakshman-reddy-sudo.github.io/grant-tracker/)
+> Built for the **Algorand No-TEAL Hackathon** — leveraging native Algorand features (Multisig, Transaction Notes) without custom smart contracts.
 
----
-
-## 📋 Table of Contents
-
-- [Problem Statement](#-problem-statement)
-- [Solution Overview](#-solution-overview)
-- [Architecture](#-architecture)
-- [Tech Stack](#-tech-stack)
-- [Features](#-features)
-- [Project Structure](#-project-structure)
-- [Setup & Installation](#-setup--installation)
-- [How It Works](#-how-it-works)
-- [Demo Flow](#-demo-flow-for-judges)
-- [Algorand Integration Details](#-algorand-integration-details)
-- [Screenshots](#-screenshots)
-- [Team](#-team)
+🌐 **Live Demo**: [lakshman-reddy-sudo.github.io/grant-tracker](https://lakshman-reddy-sudo.github.io/grant-tracker/)
 
 ---
 
-## 🎯 Problem Statement
+## 🎯 What It Does
 
-**Project 3: Transparent Grant and Fund Tracking System for Student Projects**
+GrantChain solves the transparency problem in grant management:
 
-> Build a blockchain-based grant and fund tracking system using Algorand to ensure transparent, milestone-based allocation and utilization of student project funds. The system should provide clear visibility into how funds are released and spent.
+- **Sponsors** create and fund grants with milestone-based payouts
+- **Admin (DAO)** reviews and approves/rejects submitted milestones
+- **Teams** submit work for each milestone and track expenses
+- **Public** can view all grants and their progress transparently
 
-### What We Built
-- ✅ Grant creation and funding interface
-- ✅ Milestone-based fund configuration & disbursement
-- ✅ Milestone approval and fund release mechanism
-- ✅ Real-time transaction dashboard
-- ✅ DAO-style voting interface for approvals
-- ✅ Public transparency page
-
----
-
-## 💡 Solution Overview
-
-GrantChain is a **No-TEAL** (no custom smart contracts) grant tracking system that uses **native Algorand features**:
-
-| Algorand Feature | How We Use It |
-|---|---|
-| **Multisig Accounts** | 2-of-3 escrow wallet (Sponsor + Admin + Team) to lock grant funds |
-| **Payment Transactions** | Real ALGO transfers for funding grants and releasing milestone payments |
-| **Transaction Notes** | On-chain storage of milestone descriptions, expense data, and audit trails |
-| **Pera Wallet** | Mobile wallet signing for all on-chain operations |
-| **Indexer API** | Fetching transaction history and account balances in real-time |
-
-**Why No TEAL?**
-> "We use Algorand's native multisig escrow instead of custom contracts for security, simplicity, and zero contract-bug risk."
+Every transaction, vote, and expense is recorded with a unique transaction ID, creating a complete audit trail.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   React Frontend                     │
-│  (Login, Dashboard, GrantDetail, Analytics, Public)  │
-└─────────────────┬───────────────────┬───────────────┘
-                  │                   │
-                  ▼                   ▼
-    ┌─────────────────┐   ┌──────────────────────┐
-    │   Pera Wallet    │   │   localStorage       │
-    │ (TestNet Signing)│   │  (Grant Metadata)    │
-    └────────┬────────┘   └──────────────────────┘
-             │
-             ▼
-    ┌─────────────────────────────────────────┐
-    │         Algorand TestNet                 │
-    │                                          │
-    │  • algod API  (submit transactions)      │
-    │  • Indexer API (query history/balances)   │
-    │  • Multisig    (escrow addresses)         │
-    │  • Txn Notes   (on-chain data)            │
-    └─────────────────────────────────────────┘
-```
-
-### Data Flow
-
-```
-Sponsor creates grant → Multisig escrow address generated
-                       → Sponsor funds escrow (real ALGO via Pera)
-                       
-Team submits milestone → Admin reviews & approves (DAO vote)
-                       → Sponsor releases funds (real ALGO transfer)
-                       → Transaction ID visible on Pera Explorer
-                       
-Team logs expenses    → 0-ALGO self-transaction with note field
-                       → Expense data permanently on blockchain
+┌──────────────────────────────────────────────────────┐
+│                    GrantChain App                      │
+├──────────────────────────────────────────────────────┤
+│  Frontend (React + Vite)                              │
+│  ├── Landing Page       — Public intro                │
+│  ├── Login              — Role-based auth             │
+│  ├── Dashboard          — All grants overview          │
+│  ├── Create Grant       — Multi-milestone setup        │
+│  ├── Grant Detail       — Full workflow & actions       │
+│  ├── Analytics          — Charts & insights             │
+│  └── Public View        — Transparency page             │
+├──────────────────────────────────────────────────────┤
+│  Algorand Integration (algosdk v3)                    │
+│  ├── Pera Wallet Connect — Wallet linking              │
+│  ├── Multisig Escrow     — Shared custody addresses    │
+│  ├── Transaction Notes   — On-chain metadata           │
+│  └── Balance Queries     — Real-time wallet balances    │
+├──────────────────────────────────────────────────────┤
+│  State Management                                     │
+│  └── localStorage        — Grants, milestones, txns    │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 👤 Roles & Permissions
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | React 19 | UI components and routing |
-| **Build Tool** | Vite 7 | Fast dev server and production builds |
-| **Styling** | Vanilla CSS | Dark mode glassmorphism design |
-| **Blockchain SDK** | `algosdk` v3 | Transaction creation, multisig, submission |
-| **Wallet** | `@perawallet/connect` | Mobile wallet QR code signing |
-| **Routing** | `react-router-dom` v7 | HashRouter for SPA on GitHub Pages |
-| **Storage** | localStorage | Grant metadata, milestones, expenses |
-| **Deployment** | GitHub Pages + `gh-pages` | Static hosting |
+| Action | Sponsor | Admin | Team |
+|---|:---:|:---:|:---:|
+| Create Grant | ✅ | ✅ | ❌ |
+| Fund Grant | ✅ | ❌ | ❌ |
+| Approve/Reject Milestone | ❌ | ✅ | ❌ |
+| Submit Milestone Work | ❌ | ❌ | ✅ |
+| Release Milestone Funds | ✅ | ❌ | ❌ |
+| Log Expenses | ❌ | ❌ | ✅ |
+| Cast DAO Votes | ✅ | ✅ | ❌ |
+| View Public Dashboard | ✅ | ✅ | ✅ |
 
-### Key Dependencies
+---
 
-```json
-{
-  "algosdk": "^3.5.2",
-  "@perawallet/connect": "^1.5.1",
-  "react": "^19.2.0",
-  "react-router-dom": "^7.13.1",
-  "buffer": "^6.0.3"
-}
+## 🔄 Grant Lifecycle Workflow
+
+```
+1. CREATE  →  Sponsor/Admin creates grant with milestones
+                 ↓
+2. FUND    →  Sponsor funds the grant (recorded with Txn ID)
+                 ↓
+3. SUBMIT  →  Team submits work for a milestone
+                 ↓
+4. REVIEW  →  Admin approves ✅ or rejects ❌ the submission
+                 ↓ (if approved)          ↓ (if rejected)
+5. RELEASE →  Sponsor releases      Team resubmits
+               milestone funds         their work
+                 ↓
+6. FUNDED  →  Milestone marked as funded with Txn ID
+```
+
+### Milestone Status Flow
+
+```
+pending → submitted → approved → funded
+                   ↘ rejected → pending (resubmit)
 ```
 
 ---
 
-## ✨ Features
+## ⚙️ Tech Stack
 
-### 🔐 Role-Based Access Control
-
-| Role | Capabilities |
-|------|-------------|
-| **🏛️ Sponsor** | Create grants, fund escrow (real ALGO), release milestone payments, view analytics |
-| **🎓 Admin/Faculty** | Review milestone submissions, approve/reject milestones, cast DAO votes |
-| **👨‍💻 Student Team** | Submit milestone deliverables, log expenses on-chain, resubmit rejected work |
-
-### 📄 Pages
-
-1. **Login Page** — Name entry, role selection, Pera Wallet connection (TestNet)
-2. **Landing Page** — Feature overview with role-specific welcome message
-3. **Dashboard** — Role-based stats, action items queue, grant cards with progress bars, recent transactions
-4. **Create Grant** — Sponsor-only form with project details, participant wallets, configurable milestones (must total 100%), auto-generates 2-of-3 multisig escrow address
-5. **Grant Detail** — Full milestone timeline with role-gated actions:
-   - Team: Submit work, resubmit rejected milestones
-   - Admin: Approve/reject with notes, DAO voting (👍/👎)
-   - Sponsor: Fund grant & release milestone payments via Pera Wallet
-   - All: View on-chain transaction links, expense logs, vote tallies
-6. **Analytics Dashboard** — SVG donut chart for milestone status, expense breakdown by category (bar charts), fund utilization per grant with progress indicators
-7. **Public Transparency Page** — No login required, expandable grant cards, all milestones and transactions visible, blockchain verification links
-
-### ⛓️ On-Chain Operations
-
-| Action | Algorand Operation | Who |
-|--------|-------------------|-----|
-| **Fund Grant** | Real ALGO payment → escrow/team wallet | Sponsor |
-| **Release Milestone** | Real ALGO payment with note: `GRANTCHAIN MILESTONE: ...` | Sponsor |
-| **Log Expense** | 0-ALGO self-transaction with note: `GRANTCHAIN EXPENSE: ...` | Team |
-
-All transactions are signed via **Pera Wallet** and submitted to **Algorand TestNet**. Transaction IDs link directly to **Pera Explorer** for verification.
-
-### 🗳️ DAO-Style Voting
-
-- Sponsors and Admins can vote 👍/👎 on submitted milestones
-- Vote tallies displayed on each milestone
-- Prevents double voting (updates existing vote)
-- Transparent governance visible to all roles
+| Technology | Purpose |
+|---|---|
+| **React 19** | UI framework |
+| **Vite 7** | Build tool & dev server |
+| **algosdk v3** | Algorand SDK for wallet, transactions, multisig |
+| **@perawallet/connect v1.5** | Pera Wallet integration |
+| **react-router-dom v7** | Client-side routing (HashRouter for GitHub Pages) |
+| **localStorage** | Persistent state management |
+| **Algorand TestNet** | Blockchain network (Algonode public endpoints) |
 
 ---
 
@@ -171,220 +108,175 @@ All transactions are signed via **Pera Wallet** and submitted to **Algorand Test
 
 ```
 grant-tracker/
-├── index.html              # Entry point
-├── package.json            # Dependencies & scripts
-├── vite.config.js          # Vite config (base path, Buffer polyfill)
 ├── src/
-│   ├── main.jsx            # React entry + Buffer polyfill
-│   ├── App.jsx             # Router, NavBar, ProtectedRoute, wallet state
-│   ├── index.css           # Full design system (dark glassmorphism)
+│   ├── App.jsx              # Main app, routing, navbar, wallet connection
+│   ├── main.jsx             # Entry point
+│   ├── index.css            # Full design system (dark theme, glassmorphism)
 │   ├── pages/
-│   │   ├── Login.jsx       # Auth + Pera Wallet connection
-│   │   ├── Landing.jsx     # Hero + feature cards
-│   │   ├── Dashboard.jsx   # Role-based stats & action items
-│   │   ├── CreateGrant.jsx # Grant form + multisig generation
-│   │   ├── GrantDetail.jsx # Milestone timeline + on-chain actions
-│   │   ├── Analytics.jsx   # Charts & fund utilization
-│   │   └── PublicView.jsx  # Public transparency dashboard
+│   │   ├── Landing.jsx      # Public landing page with features
+│   │   ├── Login.jsx        # Role-based login (Sponsor/Admin/Team)
+│   │   ├── Dashboard.jsx    # Grant cards, stats, filtering
+│   │   ├── CreateGrant.jsx  # Multi-step grant creation form
+│   │   ├── GrantDetail.jsx  # Full grant view with milestones & actions
+│   │   ├── Analytics.jsx    # Visual analytics dashboard
+│   │   └── PublicView.jsx   # Public transparency view
 │   └── utils/
-│       ├── algorand.js     # Algod/Indexer clients, txn helpers, multisig
-│       ├── wallet.js       # Pera Wallet connect/disconnect/sign
-│       └── store.js        # localStorage CRUD, auth, demo data
-└── dist/                   # Production build output
+│       ├── algorand.js      # Algorand SDK: wallet balance, txns, multisig
+│       ├── store.js         # localStorage CRUD: grants, auth, transactions
+│       └── wallet.js        # Pera Wallet connect/disconnect/reconnect
+├── index.html               # SPA entry
+├── vite.config.js           # Vite config with /grant-tracker/ base path
+└── package.json             # Dependencies
 ```
 
 ---
 
-## 🚀 Setup & Installation
+## 🔑 Key Features Explained
+
+### 1. Multisig Escrow Addresses
+When a grant is created, a **Multisig address** is generated from the sponsor, admin, and team wallet addresses using Algorand's native multisig feature. This creates a shared-custody escrow — no custom smart contract needed.
+
+```javascript
+// algorand.js — createMultisigAddress()
+algosdk.multisigAddress({
+    version: 1,
+    threshold: 2,  // 2-of-3 approval needed
+    addrs: [sponsorAddr, adminAddr, teamAddr]
+});
+```
+
+### 2. Pera Wallet Integration
+Users can connect their **Pera Wallet** (Algorand's primary mobile wallet) to the app. The connected wallet address is displayed in the navbar and associated with the user's role. Real-time balance is fetched from Algorand TestNet.
+
+```javascript
+// wallet.js
+const peraWallet = new PeraWalletConnect({
+    network: 'testnet',
+    chainId: 416002,
+});
+```
+
+### 3. Transaction Notes as Metadata
+Every funding and milestone release generates a transaction with a descriptive note embedded in the Algorand transaction, creating a permanent on-chain audit trail.
+
+```
+GRANTCHAIN FUND: Research Grant | Amount: 5 ALGO
+GRANTCHAIN MILESTONE: Phase 1 Complete | Grant: Research Grant
+```
+
+### 4. Role-Based Access Control
+The login system assigns roles (Sponsor, Admin, Team) which determine what actions are available. Each role sees different buttons and capabilities on the Grant Detail page.
+
+### 5. Real-Time Analytics
+The Analytics page shows:
+- Total grants, funding, and expenses
+- Status distribution (draft, active, completed)
+- Role-based activity breakdown
+- Top funded grants
+
+### 6. Public Transparency Page
+Anyone can visit the Public page to view all grant details, milestone progress, and transaction history — ensuring full transparency without needing to log in.
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
+- **Node.js** ≥ 18
+- **npm** or **yarn**
+- **Pera Wallet** app (optional, for wallet linking)
 
-- **Node.js** v18+ and npm
-- **Pera Wallet** app on mobile (set to **TestNet**)
-- **TestNet ALGO** from the [Algorand Dispenser](https://bank.testnet.algorand.network/)
-
-### Quick Start
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/lakshman-reddy-sudo/grant-tracker.git
-cd grant-tracker
+git clone https://github.com/lakshman-reddy-sudo/lakshman-reddy-sudo.github.io.git
+cd lakshman-reddy-sudo.github.io/grant-tracker
 
 # Install dependencies
 npm install
 
 # Start development server
 npm run dev
-
-# Open in browser
-# → http://localhost:5173/grant-tracker/
 ```
 
-### Build & Deploy
+The app runs at `http://localhost:5173/grant-tracker/`
+
+### Build for Production
 
 ```bash
-# Production build
 npm run build
-
-# Deploy to GitHub Pages
-npm run deploy
 ```
 
-### Wallet Setup (For Real TestNet Transactions)
+### Deploy to GitHub Pages
 
-1. Install **Pera Wallet** on your phone (iOS/Android)
-2. Switch to **TestNet** (tap network dropdown in Pera → select TestNet)
-3. Create **3 accounts** (one per role: Sponsor, Admin, Team)
-4. Fund each account with test ALGO from [dispenser](https://bank.testnet.algorand.network/)
-5. When logging in to GrantChain, connect the appropriate wallet for each role
-
----
-
-## ⚙️ How It Works
-
-### 1. Grant Creation (Sponsor)
-```
-Sponsor fills form → Enters participant wallet addresses
-                   → algosdk.multisigAddress() generates 2-of-3 escrow
-                   → Grant metadata saved to localStorage
-                   → Sponsor funds escrow via Pera (real ALGO transfer)
-```
-
-### 2. Milestone Lifecycle
-```
-pending → [Team submits work] → submitted
-submitted → [Admin approves] → approved
-         → [Admin rejects]  → rejected → [Team resubmits] → pending
-approved → [Sponsor releases ALGO via Pera] → funded ✅
-```
-
-### 3. Expense Logging (Team)
-```
-Team fills expense form → createNoteTxn(address, "GRANTCHAIN EXPENSE: ...")
-                        → Sign with Pera Wallet
-                        → 0-ALGO self-transaction submitted to TestNet
-                        → Transaction ID stored & linked to Pera Explorer
-```
-
-### 4. Multisig Escrow
-
-```javascript
-// From algorand.js
-const msigParams = {
-    version: 1,
-    threshold: 2,        // 2-of-3 signatures required
-    addrs: [sponsorAddr, adminAddr, teamAddr],
-};
-const escrowAddr = algosdk.multisigAddress(msigParams);
+```bash
+npm run build
+# Copy dist/ contents to your GitHub Pages repo
 ```
 
 ---
 
-## 🎤 Demo Flow (For Judges)
+## 🧪 How to Test the Full Workflow
 
-### Setup (Before Demo)
-1. Three team members each have Pera Wallet on TestNet with ~10 ALGO
-2. Clear browser localStorage for fresh demo data
-
-### Live Demo Steps
-
-| Step | Who | Action | What Judges See |
-|------|-----|--------|----------------|
-| 1 | Sponsor | Login → Connect Pera → Create Grant with 3 milestones | Grant form with real wallet addresses, escrow generated |
-| 2 | Sponsor | Click "Fund Grant" → Sign in Pera | Real ALGO leaves sponsor wallet, transaction on Explorer |
-| 3 | Team | Login → Go to grant → Submit Milestone 1 | Submission note saved, status changes to "Submitted" |
-| 4 | Admin | Login → See "Review" action item → Approve | DAO vote recorded, status changes to "Approved" |
-| 5 | Sponsor | Login → See "Release Funds" → Sign in Pera | Real ALGO sent to team wallet, Pera Explorer link appears |
-| 6 | Team | Log an expense → Sign in Pera | 0-ALGO self-txn on blockchain with expense note |
-| 7 | Anyone | Visit Public page | Full transparency — all grants, milestones, transactions visible |
-| 8 | Anyone | Click any Txn ID → Opens Pera Explorer | **Real blockchain verification** ✅ |
-
-### Key Talking Points
-- 💰 "Every fund transfer is a real Algorand transaction"
-- 🔐 "Multisig escrow ensures no single person can move funds"
-- 📝 "Expenses are permanently logged on the blockchain"
-- 🌍 "Public dashboard — anyone can verify without logging in"
-- ⚡ "No smart contracts = zero contract bugs, faster development"
+1. **Login as Sponsor** → Enter name → Select "Sponsor" → Login
+2. **Connect Pera Wallet** → Click wallet button → Scan QR with Pera app
+3. **Create Grant** → Fill in name, description, add milestones → Submit
+4. **Fund the Grant** → Click "💰 Fund Grant" → Enter amount → Send ALGO
+5. **Logout → Login as Team** → Go to the grant → Click "📤 Submit Work" on a milestone
+6. **Logout → Login as Admin** → Go to the grant → Click "✅ Approve" or "❌ Reject"
+7. **Logout → Login as Sponsor** → Go to the grant → Click "💸 Release ALGO" on approved milestones
+8. **Check Public View** → Click "Public" in navbar → See all grants transparently
 
 ---
 
-## 🔗 Algorand Integration Details
+## 🌐 Algorand TestNet Configuration
 
-### Endpoints Used
+The app connects to Algorand TestNet using free public endpoints:
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| **Algod** | `https://testnet-api.algonode.cloud` | Submit transactions, get params |
-| **Indexer** | `https://testnet-idx.algonode.cloud` | Query transaction history |
-| **Pera Explorer** | `https://testnet.explorer.perawallet.app` | Verify transactions |
+| Service | Endpoint |
+|---|---|
+| Algod API | `https://testnet-api.algonode.cloud` |
+| Indexer API | `https://testnet-idx.algonode.cloud` |
+| Explorer | `https://testnet.explorer.perawallet.app` |
+| Lora Explorer | `https://lora.algokit.io/testnet` |
 
-### Key SDK Functions
-
-```javascript
-// Transaction creation
-algosdk.makePaymentTxnWithSuggestedParamsFromObject({ from, to, amount, note, suggestedParams })
-
-// Multisig address generation
-algosdk.multisigAddress({ version: 1, threshold: 2, addrs: [...] })
-
-// Pera Wallet signing
-peraWallet.signTransaction([[{ txn }]])
-
-// Submit to network
-algodClient.sendRawTransaction(signedTxn).do()
-
-// Wait for confirmation
-algosdk.waitForConfirmation(algodClient, txid, 4)
-```
-
-### Transaction Types
-
-| Type | Amount | Note Format | Purpose |
-|------|--------|-------------|---------|
-| Fund | N ALGO | `GRANTCHAIN FUND: {name} \| Amount: N ALGO` | Sponsor funds grant |
-| Release | N ALGO | `GRANTCHAIN MILESTONE: {name} \| Grant: {grant}` | Milestone payment |
-| Expense | 0 ALGO | `GRANTCHAIN EXPENSE: {desc} \| N ALGO \| {cat}` | Team expense log |
+No API keys required — these are public Algonode endpoints.
 
 ---
 
-## 🎨 Design
+## 📊 What Makes This Work Without Smart Contracts
 
-- **Theme:** Dark mode with glassmorphism (frosted glass cards, gradient accents)
-- **Colors:** Purple primary (#8b5cf6), green success (#10b981), blue info (#3b82f6)
-- **Typography:** System font stack with monospace for addresses/hashes
-- **Responsive:** Mobile-friendly layout with flexible grids
-- **Animations:** Fade-in transitions, hover effects, gradient text
+GrantChain demonstrates that you can build a fully functional grant management system using **only native Algorand features**:
 
----
+| Feature | Algorand Native Feature Used |
+|---|---|
+| Escrow / Custody | **Multisig Accounts** (2-of-3 threshold) |
+| Audit Trail | **Transaction Notes** (embedded metadata) |
+| Identity | **Wallet Addresses** (Pera Wallet) |
+| Fund Tracking | **Payment Transactions** (ALGO transfers) |
+| Verification | **Block Explorer** links (Lora / AlgoExplorer) |
 
-## 📜 Learning Outcomes
-
-- ✅ Understanding decentralized escrow and conditional payments
-- ✅ Implementing wallet-based authentication with Pera
-- ✅ Building transparent financial dashboards
-- ✅ Designing milestone-based fund disbursement mechanisms
-- ✅ Implementing DAO-style governance voting
-- ✅ Recording verifiable audit trails on blockchain
+No TEAL, no ABI, no smart contract compilation — just native blockchain primitives.
 
 ---
 
-## 🌍 Real-World Application
+## 🎨 Design System
 
-GrantChain enhances accountability in grant management by:
-- Building **trust** between sponsors and student teams
-- Providing **full transparency** into fund utilization
-- Creating **immutable audit trails** on the blockchain
-- Enabling **public verification** without requiring login
-- Promoting **responsible fund utilization** within institutions
-
----
-
-## 👥 Team
-
-Built for the **Algorand Open Innovation Hackathon** (No-TEAL Track)
+The app uses a custom dark theme with glassmorphism:
+- **Color Palette**: Deep purple/blue gradients with vibrant accents
+- **Typography**: Inter font family (Google Fonts)
+- **Components**: Glass-effect cards, animated badges, responsive grid
+- **Animations**: Fade-in transitions, hover effects, gradient text
 
 ---
 
 ## 📄 License
 
-MIT
+This project is built for the **Algorand No-TEAL Hackathon**.
+
+---
+
+## 👨‍💻 Team
+
+Built by **Lakshman Reddy** — [GitHub](https://github.com/lakshman-reddy-sudo)

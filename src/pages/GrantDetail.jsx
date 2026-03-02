@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getGrant, updateGrant, updateMilestone, addTransaction, addExpense, addVote, getGrantStats } from '../utils/store';
 import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, getBalance, isValidAddress, LORA_BASE } from '../utils/algorand';
-import { peraWallet } from '../utils/wallet';
 
 export default function GrantDetail({ user, walletAddress }) {
     const { id } = useParams();
@@ -200,12 +199,9 @@ export default function GrantDetail({ user, walletAddress }) {
                 <div className="modal-overlay" style={{ zIndex: 300 }}>
                     <div className="modal" style={{ textAlign: 'center', maxWidth: 380 }}>
                         <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
-                        <h3 style={{ marginBottom: 8 }}>Waiting for Pera Wallet...</h3>
+                        <h3 style={{ marginBottom: 8 }}>Processing...</h3>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-                            Open Pera Wallet on your phone to sign the transaction
-                        </p>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 8 }}>
-                            Broadcasting to Algorand TestNet
+                            Recording transaction on Algorand TestNet
                         </p>
                     </div>
                 </div>
@@ -456,8 +452,8 @@ export default function GrantDetail({ user, walletAddress }) {
                                     </>
                                 )}
                                 {user.role === 'sponsor' && m.status === 'approved' && (
-                                    <button className="btn btn-primary btn-sm" onClick={() => handleReleaseFunds(m)} disabled={processing}>
-                                        {processing ? '⏳ Signing...' : `💸 Release ${m.amount} ALGO`}
+                                    <button className="btn btn-primary btn-sm" onClick={() => handleReleaseFunds(m)}>
+                                        {`💸 Release ${m.amount} ALGO`}
                                     </button>
                                 )}
                                 {m.status === 'submitted' && user.role !== 'team' && (

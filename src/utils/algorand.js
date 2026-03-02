@@ -8,30 +8,6 @@ const indexerClient = new algosdk.Indexer('', 'https://testnet-idx.algonode.clou
 export const EXPLORER_BASE = 'https://testnet.explorer.perawallet.app';
 export const LORA_BASE = 'https://lora.algokit.io/testnet';
 
-// App signing account (TestNet only — funded via Lora)
-const APP_MNEMONIC = 'sound gossip chief once prison sister powder rate bless unfold welcome parade flavor raven camera found festival high round action october gesture reunion about gate';
-const { addr: APP_ADDR, sk: APP_SK } = algosdk.mnemonicToSecretKey(APP_MNEMONIC);
-export const APP_ADDRESS = String(APP_ADDR);
-
-/**
- * Send ALGO from the app account — auto-signs, no wallet popups
- */
-export async function sendFromApp(toAddress, amountInAlgo, note = '') {
-    const suggestedParams = await getSuggestedParams();
-    const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-        from: APP_ADDRESS,
-        to: toAddress,
-        amount: Math.round(amountInAlgo * 1_000_000),
-        note: new TextEncoder().encode(note),
-        suggestedParams,
-    });
-    const signedTxn = txn.signTxn(APP_SK);
-    const resp = await algodClient.sendRawTransaction(signedTxn).do();
-    const txid = typeof resp === 'string' ? resp : (resp?.txid || resp?.txId || String(resp));
-    await algosdk.waitForConfirmation(algodClient, txid, 4);
-    return txid;
-}
-
 /**
  * Get AlgoExplorer URL for a transaction
  */
