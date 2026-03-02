@@ -4,10 +4,27 @@ import algosdk from 'algosdk';
 const algodClient = new algosdk.Algodv2('', 'https://testnet-api.algonode.cloud', '');
 const indexerClient = new algosdk.Indexer('', 'https://testnet-idx.algonode.cloud', '');
 
+// Pera Explorer base URL for TestNet
+export const EXPLORER_BASE = 'https://testnet.explorer.perawallet.app';
+
 /**
- * Create a multisig escrow address
- * @param {string[]} addresses - Array of wallet addresses (sponsor, admin, faculty)
- * @param {number} threshold - Number of required signatures (default: 2)
+ * Get AlgoExplorer URL for a transaction
+ */
+export function getExplorerTxnUrl(txnId) {
+    return `${EXPLORER_BASE}/tx/${txnId}`;
+}
+
+/**
+ * Get AlgoExplorer URL for an address
+ */
+export function getExplorerAddrUrl(address) {
+    return `${EXPLORER_BASE}/address/${address}`;
+}
+
+/**
+ * Create a multisig escrow address from 3 wallet addresses
+ * @param {string[]} addresses - [sponsor, admin, team]
+ * @param {number} threshold - signatures required (default 2)
  * @returns {{ address: string, params: object }}
  */
 export function createMultisigAddress(addresses, threshold = 2) {
@@ -21,74 +38,63 @@ export function createMultisigAddress(addresses, threshold = 2) {
 }
 
 /**
- * Get suggested transaction params
+ * Get suggested transaction params from the network
  */
 export async function getSuggestedParams() {
     return await algodClient.getTransactionParams().do();
 }
 
 /**
- * Create a funding transaction (sponsor → escrow)
- * @param {string} senderAddr
- * @param {string} escrowAddr
- * @param {number} amountInAlgo
- * @param {string} note
+ * Create a payment transaction
+ * @param {string} from - sender address
+ * @param {string} to - receiver address
+ * @param {number} amountInAlgo - amount in ALGO
+ * @param {string} note - transaction note
  * @returns {algosdk.Transaction}
  */
-export async function createFundingTxn(senderAddr, escrowAddr, amountInAlgo, note = '') {
+export async function createPaymentTxn(from, to, amountInAlgo, note = '') {
     const suggestedParams = await getSuggestedParams();
-    const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-        from: senderAddr,
-        to: escrowAddr,
+    return algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+        from,
+        to,
         amount: algosdk.algosToMicroalgos(amountInAlgo),
         note: new TextEncoder().encode(note),
         suggestedParams,
     });
-    return txn;
 }
 
 /**
- * Create a milestone release transaction (escrow → team via multisig)
- * @param {string} escrowAddr
- * @param {string} teamAddr
- * @param {number} amountInAlgo
- * @param {string} milestoneNote
+ * Create a 0-ALGO self-transaction for logging data on-chain
+ * @param {string} address - the sender/receiver (same)
+ * @param {string} note - data to store on-chain
  * @returns {algosdk.Transaction}
  */
-export async function createMilestoneReleaseTxn(escrowAddr, teamAddr, amountInAlgo, milestoneNote) {
+export async function createNoteTxn(address, note) {
     const suggestedParams = await getSuggestedParams();
-    const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-        from: escrowAddr,
-        to: teamAddr,
-        amount: algosdk.algosToMicroalgos(amountInAlgo),
-        note: new TextEncoder().encode(`MILESTONE: ${milestoneNote}`),
-        suggestedParams,
-    });
-    return txn;
-}
-
-/**
- * Create a self-transaction for expense logging
- * @param {string} teamAddr
- * @param {string} expenseNote
- * @returns {algosdk.Transaction}
- */
-export async function createExpenseLogTxn(teamAddr, expenseNote) {
-    const suggestedParams = await getSuggestedParams();
-    const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-        from: teamAddr,
-        to: teamAddr,
+    return algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+        from: address,
+        to: address,
         amount: 0,
-        note: new TextEncoder().encode(`EXPENSE: ${expenseNote}`),
+        note: new TextEncoder().encode(note),
         suggestedParams,
     });
-    return txn;
 }
 
 /**
- * Get account balance
+ * Submit a signed transaction to the network
+ * @param {Uint8Array} signedTxn - the signed transaction bytes
+ * @returns {Promise<string>} - the transaction ID
+ */
+export async function submitSignedTxn(signedTxn) {
+    const { txid } = await algodClient.sendRawTransaction(signedTxn).do();
+    await algosdk.waitForConfirmation(algodClient, txid, 4);
+    return txid;
+}
+
+/**
+ * Get account balance in ALGO
  * @param {string} address
- * @returns {Promise<number>} balance in ALGO
+ * @returns {Promise<number>}
  */
 export async function getBalance(address) {
     try {
@@ -129,29 +135,7 @@ export async function getTransactionHistory(address, limit = 20) {
 }
 
 /**
- * Wait for transaction confirmation
- * @param {string} txId
- * @returns {Promise<object>}
- */
-export async function waitForConfirmation(txId) {
-    return await algosdk.waitForConfirmation(algodClient, txId, 4);
-}
-
-/**
- * Submit a signed transaction
- * @param {Uint8Array} signedTxn
- * @returns {Promise<string>} transaction ID
- */
-export async function submitTransaction(signedTxn) {
-    const { txid } = await algodClient.sendRawTransaction(signedTxn).do();
-    await waitForConfirmation(txid);
-    return txid;
-}
-
-/**
  * Format address for display
- * @param {string} address
- * @returns {string} shortened address
  */
 export function shortAddress(address) {
     if (!address) return '';

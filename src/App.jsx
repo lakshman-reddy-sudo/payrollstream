@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { connectWallet, disconnectWallet, reconnectWallet } from './utils/wallet';
 import { shortAddress } from './utils/algorand';
 import { getCurrentUser, logoutUser, updateUserWallet } from './utils/store';
@@ -8,6 +8,8 @@ import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import CreateGrant from './pages/CreateGrant';
 import GrantDetail from './pages/GrantDetail';
+import Analytics from './pages/Analytics';
+import PublicView from './pages/PublicView';
 
 const ROLE_CONFIG = {
   sponsor: { icon: '🏛️', label: 'Sponsor', color: '#8b5cf6' },
@@ -37,6 +39,8 @@ function NavBar({ user, walletAddress, onConnect, onDisconnect, onLogout }) {
       <ul className="navbar-nav">
         <li><Link to="/" className={isActive('/')}>Home</Link></li>
         <li><Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link></li>
+        <li><Link to="/analytics" className={isActive('/analytics')}>📈 Analytics</Link></li>
+        <li><Link to="/public" className={isActive('/public')}>🌍 Public</Link></li>
         {user.role === 'sponsor' && (
           <li><Link to="/create" className={isActive('/create')}>Create Grant</Link></li>
         )}
@@ -122,7 +126,7 @@ function App() {
       />
       <Routes>
         <Route path="/login" element={
-          user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} />
+          user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} onWalletConnect={(addr) => { setWalletAddress(addr); }} />
         } />
         <Route path="/" element={
           user ? <Landing user={user} walletAddress={walletAddress} onConnect={handleConnect} />
@@ -143,6 +147,12 @@ function App() {
             <GrantDetail user={user} walletAddress={walletAddress} />
           </ProtectedRoute>
         } />
+        <Route path="/analytics" element={
+          <ProtectedRoute user={user}>
+            <Analytics user={user} />
+          </ProtectedRoute>
+        } />
+        <Route path="/public" element={<PublicView />} />
       </Routes>
     </Router>
   );

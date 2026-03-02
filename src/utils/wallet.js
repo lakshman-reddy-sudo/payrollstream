@@ -1,7 +1,8 @@
 import { PeraWalletConnect } from '@perawallet/connect';
 
 const peraWallet = new PeraWalletConnect({
-    chainId: 416002, // Algorand TestNet
+    network: 'testnet',
+    chainId: 416002,
 });
 
 /**

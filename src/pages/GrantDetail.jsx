@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getGrant, updateMilestone, addTransaction, addExpense, addVote, getGrantStats } from '../utils/store';
-import { shortAddress } from '../utils/algorand';
+import { getGrant, updateGrant, updateMilestone, addTransaction, addExpense, addVote, getGrantStats } from '../utils/store';
+import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, createPaymentTxn, createNoteTxn, submitSignedTxn, getBalance } from '../utils/algorand';
+import { peraWallet } from '../utils/wallet';
 
 export default function GrantDetail({ user, walletAddress }) {
     const { id } = useParams();
@@ -10,16 +11,27 @@ export default function GrantDetail({ user, walletAddress }) {
     const [showSubmitModal, setShowSubmitModal] = useState(null);
     const [showRejectModal, setShowRejectModal] = useState(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
+    const [showFundModal, setShowFundModal] = useState(false);
     const [submitNote, setSubmitNote] = useState('');
     const [rejectNote, setRejectNote] = useState('');
     const [expense, setExpense] = useState({ description: '', amount: '', category: 'General' });
+    const [fundAmount, setFundAmount] = useState('');
+    const [processing, setProcessing] = useState(false);
+    const [liveBalance, setLiveBalance] = useState(null);
 
     const refresh = () => setGrant(getGrant(id));
     useEffect(() => { refresh(); }, [id]);
 
+    // Fetch live balance when wallet is connected
+    useEffect(() => {
+        if (walletAddress) {
+            getBalance(walletAddress).then(setLiveBalance).catch(() => { });
+        }
+    }, [walletAddress]);
+
     const showToastMsg = (type, message) => {
         setToast({ type, message });
-        setTimeout(() => setToast(null), 3500);
+        setTimeout(() => setToast(null), 4500);
     };
 
     if (!grant) {
@@ -78,36 +90,95 @@ export default function GrantDetail({ user, walletAddress }) {
         showToastMsg('error', `❌ "${milestone.name}" rejected. Team can resubmit.`);
     };
 
-    // ======== SPONSOR: Release Funds ========
-    const handleReleaseFunds = (milestone) => {
-        const txnId = `ALGO_TXN_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-        updateMilestone(grant.id, milestone.id, {
-            status: 'funded',
-            fundedAt: new Date().toISOString(),
-            txnId,
-        });
-        addTransaction(grant.id, {
-            type: 'release',
-            amount: milestone.amount,
-            note: `MILESTONE: ${milestone.name}`,
-            from: shortAddress(grant.escrowAddress),
-            to: shortAddress(grant.teamWallet),
-            txnId,
-        });
-        refresh();
-        showToastMsg('success', `💸 ${milestone.amount} ALGO released for "${milestone.name}"!`);
+    // ======== SPONSOR: Release Funds — REAL ON-CHAIN via Pera Wallet ========
+    const handleReleaseFunds = async (milestone) => {
+        if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
+        if (!grant.teamWallet) return showToastMsg('error', 'Team wallet address not set on this grant.');
+        setProcessing(true);
+        try {
+            const amount = parseFloat(milestone.amount);
+            const txn = await createPaymentTxn(
+                walletAddress,
+                grant.teamWallet,
+                amount,
+                `GRANTCHAIN MILESTONE: ${milestone.name} | Grant: ${grant.name}`
+            );
+            // Sign with Pera Wallet
+            const encodedTxn = txn.toByte();
+            const signedTxns = await peraWallet.signTransaction([[{ txn: txn }]]);
+            // Submit to Algorand TestNet
+            const txnId = await submitSignedTxn(signedTxns[0]);
+
+            updateMilestone(grant.id, milestone.id, {
+                status: 'funded',
+                fundedAt: new Date().toISOString(),
+                txnId,
+            });
+            addTransaction(grant.id, {
+                type: 'release',
+                amount: String(amount),
+                note: `MILESTONE: ${milestone.name}`,
+                from: walletAddress,
+                to: grant.teamWallet,
+                txnId,
+                onChain: true,
+            });
+            refresh();
+            showToastMsg('success', `💸 ${amount} ALGO sent on-chain! Txn: ${shortAddress(txnId)}`);
+        } catch (err) {
+            console.error('Release funds error:', err);
+            showToastMsg('error', `❌ Transaction failed: ${err.message || 'User rejected or network error'}`);
+        }
+        setProcessing(false);
+    };
+
+    // ======== SPONSOR: Fund Grant — REAL ON-CHAIN via Pera Wallet ========
+    const handleFundGrant = async () => {
+        if (!walletAddress) return showToastMsg('error', '🔗 Connect your Pera Wallet first!');
+        const amount = parseFloat(fundAmount);
+        if (!amount || amount <= 0) return showToastMsg('error', 'Enter a valid funding amount');
+        setProcessing(true);
+        try {
+            // For demo: send ALGO to team wallet directly (or escrow if configured)
+            const recipient = grant.escrowAddress || grant.teamWallet || walletAddress;
+            const txn = await createPaymentTxn(
+                walletAddress,
+                recipient,
+                amount,
+                `GRANTCHAIN FUND: ${grant.name} | Amount: ${amount} ALGO`
+            );
+            const signedTxns = await peraWallet.signTransaction([[{ txn: txn }]]);
+            const txnId = await submitSignedTxn(signedTxns[0]);
+
+            addTransaction(grant.id, {
+                type: 'fund',
+                amount: String(amount),
+                note: `Grant funding: ${amount} ALGO`,
+                from: walletAddress,
+                to: recipient,
+                txnId,
+                onChain: true,
+            });
+            const newTotal = parseFloat(grant.totalFunding || 0) + amount;
+            updateGrant(grant.id, { totalFunding: String(newTotal) });
+            refresh();
+            setShowFundModal(false);
+            setFundAmount('');
+            showToastMsg('success', `💰 ${amount} ALGO funded on-chain! Txn: ${shortAddress(txnId)}`);
+            // Refresh balance
+            getBalance(walletAddress).then(setLiveBalance).catch(() => { });
+        } catch (err) {
+            console.error('Fund grant error:', err);
+            showToastMsg('error', `❌ Funding failed: ${err.message || 'User rejected or network error'}`);
+        }
+        setProcessing(false);
     };
 
     // ======== TEAM: Resubmit rejected ========
     const handleResubmit = (milestone) => {
         updateMilestone(grant.id, milestone.id, {
-            status: 'pending',
-            rejectedAt: null,
-            rejectionNote: null,
-            submittedAt: null,
-            submittedBy: null,
-            submissionNote: null,
-            votes: [],
+            status: 'pending', rejectedAt: null, rejectionNote: null,
+            submittedAt: null, submittedBy: null, submissionNote: null, votes: [],
         });
         refresh();
         showToastMsg('info', `🔄 "${milestone.name}" reset. You can submit again.`);
@@ -120,24 +191,66 @@ export default function GrantDetail({ user, walletAddress }) {
         showToastMsg('success', `🗳️ Vote "${decision}" recorded for "${milestone.name}"`);
     };
 
-    // ======== TEAM: Log expense ========
-    const handleLogExpense = () => {
+    // ======== TEAM: Log expense — REAL ON-CHAIN 0-ALGO self-txn ========
+    const handleLogExpense = async () => {
         if (!expense.description.trim() || !expense.amount) return showToastMsg('error', 'Fill in expense details');
-        addExpense(grant.id, { ...expense, loggedBy: user.name });
-        refresh();
-        setShowExpenseModal(false);
-        setExpense({ description: '', amount: '', category: 'General' });
-        showToastMsg('success', '📝 Expense logged on record!');
-    };
 
-    const getStatusColor = (s) => {
-        const map = { pending: 'var(--text-muted)', submitted: 'var(--info)', approved: 'var(--success)', funded: 'var(--accent-solid)', rejected: 'var(--danger)' };
-        return map[s] || 'var(--text-muted)';
+        // If wallet connected, log on-chain
+        if (walletAddress) {
+            setProcessing(true);
+            try {
+                const txn = await createNoteTxn(
+                    walletAddress,
+                    `GRANTCHAIN EXPENSE: ${expense.description} | ${expense.amount} ALGO | ${expense.category} | Grant: ${grant.name}`
+                );
+                const signedTxns = await peraWallet.signTransaction([[{ txn: txn }]]);
+                const txnId = await submitSignedTxn(signedTxns[0]);
+
+                addExpense(grant.id, { ...expense, loggedBy: user.name, txnId, onChain: true });
+                addTransaction(grant.id, {
+                    type: 'expense',
+                    amount: '0',
+                    note: `EXPENSE: ${expense.description} (${expense.amount} ALGO)`,
+                    from: walletAddress, to: walletAddress, txnId, onChain: true,
+                });
+                refresh();
+                setShowExpenseModal(false);
+                setExpense({ description: '', amount: '', category: 'General' });
+                showToastMsg('success', `📝 Expense logged on-chain! Txn: ${shortAddress(txnId)}`);
+            } catch (err) {
+                console.error('Expense log error:', err);
+                showToastMsg('error', `❌ On-chain logging failed: ${err.message || 'User rejected'}`);
+            }
+            setProcessing(false);
+        } else {
+            // Off-chain fallback
+            addExpense(grant.id, { ...expense, loggedBy: user.name });
+            refresh();
+            setShowExpenseModal(false);
+            setExpense({ description: '', amount: '', category: 'General' });
+            showToastMsg('success', '📝 Expense logged (off-chain). Connect wallet for on-chain logging.');
+        }
     };
 
     return (
         <div className="page fade-in">
             {toast && <div className={`toast toast-${toast.type}`}>{toast.message}</div>}
+
+            {/* Processing Overlay */}
+            {processing && (
+                <div className="modal-overlay" style={{ zIndex: 300 }}>
+                    <div className="modal" style={{ textAlign: 'center', maxWidth: 380 }}>
+                        <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                        <h3 style={{ marginBottom: 8 }}>Waiting for Pera Wallet...</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                            Open Pera Wallet on your phone to sign the transaction
+                        </p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 8 }}>
+                            Broadcasting to Algorand TestNet
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Submit Modal */}
             {showSubmitModal && (
@@ -186,6 +299,11 @@ export default function GrantDetail({ user, walletAddress }) {
                 <div className="modal-overlay" onClick={() => setShowExpenseModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <h2>📝 Log Expense</h2>
+                        {walletAddress && (
+                            <div style={{ padding: '8px 12px', background: 'var(--success-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--success)', marginBottom: 16 }}>
+                                ⛓️ Will be recorded on Algorand TestNet (0-ALGO self-txn)
+                            </div>
+                        )}
                         <div className="form-group">
                             <label>Description *</label>
                             <input className="form-control" value={expense.description} onChange={e => setExpense({ ...expense, description: e.target.value })}
@@ -199,17 +317,43 @@ export default function GrantDetail({ user, walletAddress }) {
                         <div className="form-group">
                             <label>Category</label>
                             <select className="form-control" value={expense.category} onChange={e => setExpense({ ...expense, category: e.target.value })}>
-                                <option>General</option>
-                                <option>Hardware</option>
-                                <option>Software</option>
-                                <option>Services</option>
-                                <option>Travel</option>
-                                <option>Other</option>
+                                <option>General</option><option>Hardware</option><option>Software</option>
+                                <option>Services</option><option>Travel</option><option>Other</option>
                             </select>
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn btn-primary" onClick={handleLogExpense}>📝 Log Expense</button>
+                            <button className="btn btn-primary" onClick={handleLogExpense} disabled={processing}>
+                                {walletAddress ? '📝 Log On-Chain' : '📝 Log Expense'}
+                            </button>
                             <button className="btn btn-secondary" onClick={() => setShowExpenseModal(false)}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Fund Grant Modal */}
+            {showFundModal && (
+                <div className="modal-overlay" onClick={() => setShowFundModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <h2>💰 Fund Grant (On-Chain)</h2>
+                        <div style={{ padding: '8px 12px', background: 'var(--info-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--info)', marginBottom: 16 }}>
+                            ⛓️ Real ALGO will be sent on Algorand TestNet via Pera Wallet
+                        </div>
+                        {liveBalance !== null && (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
+                                Your balance: <strong style={{ color: 'var(--success)' }}>{liveBalance.toFixed(4)} ALGO</strong>
+                            </div>
+                        )}
+                        <div className="form-group">
+                            <label>Amount (ALGO) *</label>
+                            <input type="number" className="form-control" value={fundAmount} onChange={e => setFundAmount(e.target.value)}
+                                placeholder="1" min="0.1" step="0.1" />
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button className="btn btn-primary" onClick={handleFundGrant} disabled={processing}>
+                                {processing ? '⏳ Signing...' : '💰 Send ALGO via Pera'}
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => setShowFundModal(false)}>Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -224,17 +368,41 @@ export default function GrantDetail({ user, walletAddress }) {
                     <h1>{grant.name}</h1>
                     <p>{grant.description}</p>
                 </div>
-                {user.role === 'team' && (
-                    <button className="btn btn-secondary" onClick={() => setShowExpenseModal(true)}>📝 Log Expense</button>
-                )}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {user.role === 'team' && (
+                        <button className="btn btn-secondary" onClick={() => setShowExpenseModal(true)}>📝 Log Expense</button>
+                    )}
+                    {user.role === 'sponsor' && (
+                        <button className="btn btn-primary" onClick={() => {
+                            if (!walletAddress) { showToastMsg('error', '🔗 Connect your Pera Wallet first!'); return; }
+                            setShowFundModal(true);
+                        }}>💰 Fund Grant</button>
+                    )}
+                </div>
             </div>
+
+            {/* Wallet Warning */}
+            {!walletAddress && (user.role === 'sponsor' || user.role === 'team') && (
+                <div style={{ padding: '12px 16px', background: 'var(--warning-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 20, fontSize: '0.88rem', color: 'var(--warning)' }}>
+                    ⚠️ Connect your Pera Wallet (top right) to enable on-chain transactions
+                </div>
+            )}
 
             {/* Stats */}
             <div className="stat-grid">
                 <div className="stat-card"><div className="stat-icon purple">💰</div><div className="stat-content"><h4>Total Funding</h4><div className="stat-value">{stats.totalFunding} ALGO</div></div></div>
                 <div className="stat-card"><div className="stat-icon green">✅</div><div className="stat-content"><h4>Released</h4><div className="stat-value">{stats.releasedAmount} ALGO</div></div></div>
                 <div className="stat-card"><div className="stat-icon yellow">🔒</div><div className="stat-content"><h4>In Escrow</h4><div className="stat-value">{stats.remainingAmount} ALGO</div></div></div>
-                <div className="stat-card"><div className="stat-icon blue">📊</div><div className="stat-content"><h4>Progress</h4><div className="stat-value">{stats.progressPercent}%</div></div></div>
+                <div className="stat-card">
+                    <div className="stat-icon blue">📊</div>
+                    <div className="stat-content">
+                        <h4>Progress</h4>
+                        <div className="stat-value">{stats.progressPercent}%</div>
+                        {liveBalance !== null && (
+                            <div className="stat-sub" style={{ color: 'var(--success)' }}>Wallet: {liveBalance.toFixed(2)} ALGO</div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Progress */}
@@ -248,13 +416,17 @@ export default function GrantDetail({ user, walletAddress }) {
                 </div>
             </div>
 
-            {/* Participants */}
+            {/* Participants & Blockchain */}
             <div className="card" style={{ marginBottom: '24px' }}>
                 <h3 className="section-title">👥 Participants & Blockchain</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                     <div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>🏦 Escrow Address</div>
-                        <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--accent-hover)', wordBreak: 'break-all' }}>{grant.escrowAddress}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--accent-hover)', wordBreak: 'break-all' }}>{grant.escrowAddress}</div>
+                        {grant.escrowAddress && grant.escrowAddress.length === 58 && (
+                            <a href={getExplorerAddrUrl(grant.escrowAddress)} target="_blank" rel="noreferrer"
+                                style={{ fontSize: '0.75rem', color: 'var(--info)', textDecoration: 'none' }}>View on Explorer ↗</a>
+                        )}
                     </div>
                     <div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>🏛️ Sponsor</div>
@@ -285,60 +457,52 @@ export default function GrantDetail({ user, walletAddress }) {
                         </div>
                         {m.description && <p className="milestone-desc">{m.description}</p>}
 
-                        {/* Status + Actions */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: m.submissionNote || m.rejectionNote || (m.votes && m.votes.length > 0) ? '12px' : 0 }}>
                             <span className={`badge badge-${m.status}`} style={{ textTransform: 'capitalize' }}>{m.status}</span>
                             <div className="milestone-actions">
-                                {/* TEAM: Submit */}
                                 {user.role === 'team' && m.status === 'pending' && (
                                     <button className="btn btn-primary btn-sm" onClick={() => setShowSubmitModal(m)}>📤 Submit Work</button>
                                 )}
-                                {/* TEAM: Resubmit rejected */}
                                 {user.role === 'team' && m.status === 'rejected' && (
                                     <button className="btn btn-primary btn-sm" onClick={() => handleResubmit(m)}>🔄 Resubmit</button>
                                 )}
-                                {/* ADMIN: Approve / Reject */}
                                 {user.role === 'admin' && m.status === 'submitted' && (
                                     <>
                                         <button className="btn btn-success btn-sm" onClick={() => handleApprove(m)}>✅ Approve</button>
                                         <button className="btn btn-danger btn-sm" onClick={() => setShowRejectModal(m)}>❌ Reject</button>
                                     </>
                                 )}
-                                {/* SPONSOR: Release funds */}
                                 {user.role === 'sponsor' && m.status === 'approved' && (
-                                    <button className="btn btn-primary btn-sm" onClick={() => handleReleaseFunds(m)}>💸 Release {m.amount} ALGO</button>
+                                    <button className="btn btn-primary btn-sm" onClick={() => handleReleaseFunds(m)} disabled={processing}>
+                                        {processing ? '⏳ Signing...' : `💸 Release ${m.amount} ALGO`}
+                                    </button>
                                 )}
-                                {/* DAO Voting (any role, when submitted) */}
                                 {m.status === 'submitted' && user.role !== 'team' && (
                                     <div style={{ display: 'flex', gap: '4px' }}>
                                         <button className="btn btn-sm" style={{ background: 'var(--success-bg)', color: 'var(--success)' }} onClick={() => handleVote(m, 'approve')}>👍</button>
                                         <button className="btn btn-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }} onClick={() => handleVote(m, 'reject')}>👎</button>
                                     </div>
                                 )}
-                                {/* Funded: show txn */}
                                 {m.status === 'funded' && m.txnId && (
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        Txn: <span className="txn-hash">{shortAddress(m.txnId)}</span>
-                                    </span>
+                                    <a href={getExplorerTxnUrl(m.txnId)} target="_blank" rel="noreferrer"
+                                        style={{ fontSize: '0.8rem', color: 'var(--accent-hover)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <span className="txn-hash">{shortAddress(m.txnId)}</span>
+                                        <span style={{ fontSize: '0.7rem', background: 'var(--success-bg)', color: 'var(--success)', padding: '2px 6px', borderRadius: 4 }}>Verified ↗</span>
+                                    </a>
                                 )}
                             </div>
                         </div>
 
-                        {/* Submission note */}
                         {m.submissionNote && (
                             <div style={{ padding: '10px 14px', background: 'var(--info-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--info)', marginBottom: '8px' }}>
                                 <strong>📤 Team submission:</strong> {m.submissionNote}
                             </div>
                         )}
-
-                        {/* Rejection note */}
                         {m.rejectionNote && (
                             <div style={{ padding: '10px 14px', background: 'var(--danger-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--danger)', marginBottom: '8px' }}>
                                 <strong>❌ Rejection reason:</strong> {m.rejectionNote}
                             </div>
                         )}
-
-                        {/* DAO Votes */}
                         {m.votes && m.votes.length > 0 && (
                             <div style={{ padding: '10px 14px', background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem' }}>
                                 <strong style={{ color: 'var(--text-secondary)' }}>🗳️ Votes:</strong>{' '}
@@ -349,8 +513,6 @@ export default function GrantDetail({ user, walletAddress }) {
                                 ))}
                             </div>
                         )}
-
-                        {/* Timestamps */}
                         {(m.submittedAt || m.approvedAt || m.fundedAt) && (
                             <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                                 {m.submittedAt && <span>📤 {new Date(m.submittedAt).toLocaleDateString()} </span>}
@@ -362,21 +524,13 @@ export default function GrantDetail({ user, walletAddress }) {
                 ))}
             </div>
 
-            {/* Expense Log (visible to all, editable by team) */}
+            {/* Expense Log */}
             {grant.expenses && grant.expenses.length > 0 && (
                 <div style={{ marginTop: '40px' }}>
                     <h2 className="section-title">📝 Expense Log</h2>
                     <div className="card" style={{ overflow: 'auto' }}>
                         <table className="txn-table">
-                            <thead>
-                                <tr>
-                                    <th>Description</th>
-                                    <th>Amount</th>
-                                    <th>Category</th>
-                                    <th>Logged By</th>
-                                    <th>Date</th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th>Description</th><th>Amount</th><th>Category</th><th>Logged By</th><th>Date</th><th>On-Chain</th></tr></thead>
                             <tbody>
                                 {grant.expenses.map((exp, i) => (
                                     <tr key={i}>
@@ -385,12 +539,20 @@ export default function GrantDetail({ user, walletAddress }) {
                                         <td><span className="badge badge-submitted">{exp.category}</span></td>
                                         <td>{exp.loggedBy}</td>
                                         <td>{new Date(exp.timestamp).toLocaleDateString()}</td>
+                                        <td>
+                                            {exp.txnId ? (
+                                                <a href={getExplorerTxnUrl(exp.txnId)} target="_blank" rel="noreferrer"
+                                                    style={{ fontSize: '0.78rem', color: 'var(--success)', textDecoration: 'none' }}>
+                                                    ✅ {shortAddress(exp.txnId)} ↗
+                                                </a>
+                                            ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Off-chain</span>}
+                                        </td>
                                     </tr>
                                 ))}
                                 <tr style={{ fontWeight: 700 }}>
                                     <td style={{ color: 'var(--text-primary)' }}>Total Spent</td>
                                     <td style={{ color: 'var(--warning)' }}>{grant.expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0).toFixed(2)} ALGO</td>
-                                    <td colSpan={3}></td>
+                                    <td colSpan={4}></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -404,27 +566,28 @@ export default function GrantDetail({ user, walletAddress }) {
                     <h2 className="section-title">📜 Transaction History (On-Chain)</h2>
                     <div className="card" style={{ overflow: 'auto' }}>
                         <table className="txn-table">
-                            <thead>
-                                <tr>
-                                    <th>Type</th>
-                                    <th>Amount</th>
-                                    <th>Note</th>
-                                    <th>From</th>
-                                    <th>To</th>
-                                    <th>Date</th>
-                                    <th>Algorand Txn ID</th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th>Type</th><th>Amount</th><th>Note</th><th>From</th><th>To</th><th>Date</th><th>Algorand Txn</th></tr></thead>
                             <tbody>
                                 {grant.transactions.map((txn, i) => (
                                     <tr key={i}>
-                                        <td><span className={`badge badge-${txn.type === 'fund' ? 'funded' : 'approved'}`}>{txn.type === 'fund' ? '💰 Fund' : '📤 Release'}</span></td>
-                                        <td style={{ fontWeight: 600, color: txn.type === 'fund' ? 'var(--success)' : 'var(--accent-hover)' }}>{txn.amount} ALGO</td>
-                                        <td>{txn.note}</td>
-                                        <td><span className="txn-hash">{txn.from}</span></td>
-                                        <td><span className="txn-hash">{txn.to}</span></td>
+                                        <td><span className={`badge badge-${txn.type === 'fund' ? 'funded' : txn.type === 'expense' ? 'submitted' : 'approved'}`}>
+                                            {txn.type === 'fund' ? '💰 Fund' : txn.type === 'expense' ? '📝 Expense' : '📤 Release'}
+                                        </span></td>
+                                        <td style={{ fontWeight: 600, color: txn.type === 'fund' ? 'var(--success)' : txn.type === 'expense' ? 'var(--text-muted)' : 'var(--accent-hover)' }}>
+                                            {txn.type === 'expense' ? '0' : txn.amount} ALGO
+                                        </td>
+                                        <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.note}</td>
+                                        <td><span className="txn-hash">{shortAddress(txn.from)}</span></td>
+                                        <td><span className="txn-hash">{shortAddress(txn.to)}</span></td>
                                         <td>{new Date(txn.timestamp).toLocaleDateString()}</td>
-                                        <td><span className="txn-hash">{txn.txnId ? shortAddress(txn.txnId) : '—'}</span></td>
+                                        <td>
+                                            {txn.txnId ? (
+                                                <a href={getExplorerTxnUrl(txn.txnId)} target="_blank" rel="noreferrer"
+                                                    style={{ fontSize: '0.78rem', color: 'var(--accent-hover)', textDecoration: 'none' }}>
+                                                    {shortAddress(txn.txnId)} ↗
+                                                </a>
+                                            ) : <span className="txn-hash">—</span>}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
