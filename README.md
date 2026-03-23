@@ -2,6 +2,8 @@
 
 **On-Chain Salary Verification · Algorand TestNet**
 
+> **[🌐 Live Demo →](https://lakshman-reddy-sudo.github.io/payrollstream/)**
+
 PayrollStream is a milestone-based payroll streaming platform built on Algorand. It enables real-time salary accrual, admin-verified milestone releases, and fully on-chain transaction verification via [Lora Explorer](https://lora.algokit.io/testnet).
 
 ![PayrollStream](https://img.shields.io/badge/Algorand-TestNet-00e6b0?style=for-the-badge&logo=algorand&logoColor=white)
@@ -87,7 +89,7 @@ npm install
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173/grant-tracker/`
+The app will be available at `http://localhost:5173/`
 
 ### Build for Production
 
