@@ -1,237 +1,103 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getGrants, getGrantStats } from '../utils/store';
-import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl } from '../utils/algorand';
+import { getGrants, getGrantStats, computeEarnedSalary } from '../utils/store';
+import { shortAddress } from '../utils/algorand';
 
 export default function PublicView() {
-    const [grants, setGrants] = useState([]);
-    const [expanded, setExpanded] = useState(null);
-    useEffect(() => { setGrants(getGrants()); }, []);
+    const grants = useMemo(() => getGrants(), []);
+    const [, setTick] = useState(0);
+    useEffect(() => { const iv = setInterval(() => setTick(t => t + 1), 2000); return () => clearInterval(iv); }, []);
 
-    const toggle = (id) => setExpanded(expanded === id ? null : id);
+    if (grants.length === 0) return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+            <div style={{ textAlign: 'center' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 64, color: 'var(--border)', display: 'block', marginBottom: 16 }}>public</span>
+                <h3 className="text-h3" style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>No public payrolls yet</h3>
+                <p className="text-body-sm" style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Payrolls appear here once created.</p>
+                <Link to="/login" className="btn-primary btn-sm"><span className="material-symbols-outlined" style={{ fontSize: 16 }}>login</span> Sign In</Link>
+            </div>
+        </div>
+    );
 
-    const totalFunding = grants.reduce((s, g) => s + (parseFloat(g.totalFunding) || 0), 0);
-    const totalGrants = grants.length;
-    const totalMilestones = grants.reduce((s, g) => s + (g.milestones?.length || 0), 0);
-    const totalFunded = grants.reduce((s, g) => s + (g.milestones?.filter(m => m.status === 'funded').length || 0), 0);
+    const totals = grants.reduce((a, g) => {
+        const s = getGrantStats(g);
+        a.total += s.totalFunding; a.released += s.releasedAmount;
+        a.milestones += s.totalMilestones; a.funded += s.funded;
+        return a;
+    }, { total: 0, released: 0, milestones: 0, funded: 0 });
 
     return (
-        <div style={{ animation: 'fadeIn 0.4s ease' }}>
-            {/* Public Header */}
-            <div className="nav-blur sticky top-0 z-50 py-4">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center shadow-lg">
-                            <span className="material-symbols-outlined text-white text-xl">token</span>
-                        </div>
-                        <span className="font-bold text-lg tracking-tight text-white">GrantChain</span>
-                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Public Dashboard</span>
-                    </div>
-                    <Link to="/login" className="no-underline flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-white text-sm font-medium transition-all">
-                        <span className="material-symbols-outlined text-[18px]">login</span> Login
-                    </Link>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2.5rem 24px', animation: 'fadeUp 0.4s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div>
+                    <h1 className="text-h1" style={{ marginBottom: 4 }}>Public Payroll Transparency</h1>
+                    <p className="text-body-sm" style={{ color: 'var(--text-secondary)' }}>All payroll data is publicly verifiable on Algorand TestNet.</p>
                 </div>
+                <Link to="/login" className="btn-outline btn-sm"><span className="material-symbols-outlined" style={{ fontSize: 16 }}>login</span> Sign In</Link>
             </div>
 
-            {/* Hero */}
-            <div className="text-center py-16 px-4 relative">
-                <div className="absolute top-0 left-[30%] w-[400px] h-[400px] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
-                <h1 className="text-4xl font-extrabold text-white mb-4 relative z-10">
-                    Transparent <span className="text-gradient">Grant Tracking</span>
-                </h1>
-                <p className="text-gray-400 max-w-2xl mx-auto text-lg mb-6 relative z-10">
-                    All student project grants tracked on the Algorand blockchain. Fully transparent and verifiable.
-                </p>
-                <div className="flex gap-3 justify-center relative z-10">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                        <span className="material-symbols-outlined text-[14px]">link</span> Algorand
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-                        <span className="material-symbols-outlined text-[14px]">verified</span> TestNet Verified
-                    </span>
-                </div>
+            {/* Summary */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '2rem' }}>
+                {[
+                    { label: 'Total Payrolls', value: grants.length },
+                    { label: 'Total Funded', value: totals.total.toFixed(2), suffix: 'ALGO' },
+                    { label: 'Total Released', value: totals.released.toFixed(2), suffix: 'ALGO' },
+                    { label: 'Milestones Done', value: `${totals.funded}/${totals.milestones}` },
+                ].map((s, i) => (
+                    <div key={i} className="card-flat" style={{ padding: '1.5rem' }}>
+                        <p className="text-caption" style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{s.label}</p>
+                        <h2 className="num-display" style={{ fontSize: '1.5rem' }}>
+                            {s.value} {s.suffix && <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>{s.suffix}</span>}
+                        </h2>
+                    </div>
+                ))}
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-                {/* Stats */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                    {[
-                        { label: 'Active Grants', value: totalGrants, icon: 'inventory_2', color: 'purple' },
-                        { label: 'Total Funding', value: `${totalFunding.toFixed(1)} ALGO`, icon: 'savings', color: 'cyan' },
-                        { label: 'Milestones', value: totalMilestones, icon: 'flag', color: 'blue' },
-                        { label: 'Milestones Funded', value: totalFunded, icon: 'check_circle', color: 'green' },
-                    ].map((s, i) => (
-                        <div key={i} className="glass-panel p-5 rounded-2xl relative overflow-hidden group">
-                            <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <span className={`material-symbols-outlined text-5xl text-${s.color}-400`}>{s.icon}</span>
-                            </div>
-                            <p className="text-gray-400 text-sm font-medium mb-1">{s.label}</p>
-                            <h2 className="text-2xl font-bold text-white">{s.value}</h2>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Live Feed Header */}
-                <div className="flex items-center gap-3 mb-6">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <span className="material-symbols-outlined text-purple-400">live_tv</span>
-                        Transparency Feed
-                    </h2>
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-500/10 border border-green-500/20">
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                        <span className="text-xs text-green-400 font-medium">Live</span>
-                    </div>
-                </div>
-
-                {grants.length === 0 ? (
-                    <div className="text-center py-20">
-                        <span className="material-symbols-outlined text-6xl text-gray-600 mb-4 block">inbox</span>
-                        <h3 className="text-xl font-bold text-gray-400 mb-2">No grants yet</h3>
-                        <p className="text-gray-500">Grants will appear here once created by sponsors.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-5">
-                        {grants.map(grant => {
-                            const stats = getGrantStats(grant);
-                            const isOpen = expanded === grant.id;
-                            return (
-                                <div key={grant.id} className="glass-panel rounded-2xl p-6 cursor-pointer hover:border-purple-500/30 transition-all"
-                                    onClick={() => toggle(grant.id)}>
-                                    {/* Summary */}
-                                    <div className="flex justify-between items-start flex-wrap gap-4 mb-4">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <h3 className="text-lg font-bold text-white">{grant.name}</h3>
-                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 capitalize">{grant.status}</span>
-                                            </div>
-                                            <p className="text-gray-400 text-sm mb-3 line-clamp-2">{grant.description}</p>
-                                            <div className="flex gap-4 text-xs text-gray-500">
-                                                <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">groups</span>{grant.teamName || 'Team'}</span>
-                                                <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">paid</span>{grant.sponsorName || 'Sponsor'}</span>
-                                                <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">calendar_today</span>{new Date(grant.createdAt).toLocaleDateString()}</span>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-2xl font-bold text-white">{stats.totalFunding} <span className="text-sm font-normal text-gray-400">ALGO</span></div>
-                                            <div className="text-xs text-gray-500">{stats.progressPercent}% complete</div>
-                                        </div>
-                                    </div>
-
-                                    {/* Progress */}
-                                    <div className="w-full h-2 rounded-full progress-bar-bg overflow-hidden mb-2">
-                                        <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${stats.progressPercent}%` }}></div>
-                                    </div>
-                                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                        <span>{stats.funded}/{stats.totalMilestones} milestones funded</span>
-                                        <span className="flex items-center gap-1">
-                                            <span className="material-symbols-outlined text-[14px]">{isOpen ? 'expand_less' : 'expand_more'}</span>
-                                            {isOpen ? 'Collapse' : 'Expand'}
-                                        </span>
-                                    </div>
-
-                                    {/* Expanded */}
-                                    {isOpen && (
-                                        <div className="mt-5 pt-5 border-t border-white/10 space-y-6" onClick={e => e.stopPropagation()}>
-                                            {/* Escrow */}
-                                            {grant.escrowAddress && (
-                                                <div className="flex items-center gap-2 p-3 rounded-lg bg-black/20 border border-dashed border-white/10">
-                                                    <span className="material-symbols-outlined text-gray-500 text-sm">lock</span>
-                                                    <span className="text-xs text-gray-500">Escrow:</span>
-                                                    <span className="text-xs font-mono text-gray-300 truncate flex-1">{grant.escrowAddress}</span>
-                                                    {grant.escrowAddress.length === 58 && (
-                                                        <a href={getExplorerAddrUrl(grant.escrowAddress)} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 no-underline hover:text-indigo-300 flex items-center gap-0.5">
-                                                            Explorer <span className="material-symbols-outlined text-[12px]">open_in_new</span>
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Milestones */}
-                                            <div>
-                                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                                    <span className="material-symbols-outlined text-indigo-400 text-[18px]">flag</span> Milestones
-                                                </h4>
-                                                <div className="space-y-2">
-                                                    {grant.milestones.map(m => {
-                                                        const statusColors = { funded: 'emerald', approved: 'blue', submitted: 'amber', pending: 'slate', rejected: 'red' };
-                                                        const sc = statusColors[m.status] || 'slate';
-                                                        return (
-                                                            <div key={m.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors flex-wrap gap-2">
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className={`w-2 h-2 rounded-full bg-${sc}-500`}></span>
-                                                                    <span className="text-sm text-white font-medium">{m.name}</span>
-                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold bg-${sc}-500/10 text-${sc}-400 border border-${sc}-500/20 capitalize`}>{m.status}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className="text-sm text-purple-400 font-semibold">{m.amount} ALGO</span>
-                                                                    {m.txnId && (
-                                                                        <a href={getExplorerTxnUrl(m.txnId)} target="_blank" rel="noreferrer"
-                                                                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] no-underline border border-emerald-500/20 font-mono hover:bg-emerald-500/20 transition-colors">
-                                                                            <span className="material-symbols-outlined text-[12px]">verified</span>
-                                                                            {shortAddress(m.txnId)}
-                                                                        </a>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            {/* Transactions */}
-                                            {grant.transactions && grant.transactions.length > 0 && (
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                                        <span className="material-symbols-outlined text-purple-400 text-[18px]">history_edu</span> On-Chain Transactions
-                                                    </h4>
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full text-left border-collapse">
-                                                            <thead>
-                                                                <tr className="text-xs font-semibold text-gray-500 border-b border-gray-700">
-                                                                    <th className="pb-2 pl-2">Type</th><th className="pb-2">Amount</th><th className="pb-2">Note</th><th className="pb-2">Date</th><th className="pb-2 pr-2 text-right">Txn</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="text-sm">
-                                                                {grant.transactions.map((txn, i) => (
-                                                                    <tr key={i} className="hover:bg-white/5 transition-colors border-b border-gray-800/50">
-                                                                        <td className="py-2.5 pl-2">
-                                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border ${txn.type === 'fund' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>
-                                                                                {txn.type === 'fund' ? 'Fund' : 'Release'}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="py-2.5 text-white font-medium">{txn.amount} ALGO</td>
-                                                                        <td className="py-2.5 text-gray-400 max-w-[200px] truncate">{txn.note}</td>
-                                                                        <td className="py-2.5 text-gray-400">{new Date(txn.timestamp).toLocaleDateString()}</td>
-                                                                        <td className="py-2.5 pr-2 text-right">
-                                                                            {txn.txnId ? (
-                                                                                <a href={getExplorerTxnUrl(txn.txnId)} target="_blank" rel="noreferrer" className="text-xs font-mono text-indigo-400 no-underline hover:text-indigo-300">
-                                                                                    {shortAddress(txn.txnId)} ↗
-                                                                                </a>
-                                                                            ) : <span className="text-xs text-gray-600">—</span>}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+            {/* Payroll List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {grants.map(g => {
+                    const stats = getGrantStats(g);
+                    const sal = computeEarnedSalary(g);
+                    return (
+                        <div key={g.id} className="card-flat" style={{ padding: '1.5rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+                                <div>
+                                    <h3 style={{ fontWeight: 700, fontSize: '1rem' }}>{g.name}</h3>
+                                    <p className="text-body-sm" style={{ color: 'var(--text-secondary)', marginTop: 4, maxWidth: 500 }}>{g.description}</p>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                <span className="badge-accent">{g.status || 'Active'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                                <div><p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total</p><p className="num-display">{stats.totalFunding} ALGO</p></div>
+                                <div><p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Released</p><p className="num-display" style={{ color: 'var(--accent)' }}>{stats.releasedAmount} ALGO</p></div>
+                                <div><p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Earned (Live)</p><p className="salary-ticker-sm">{sal.earned.toFixed(4)} ALGO</p></div>
+                                <div><p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Admin / Employee</p><p className="text-body-sm" style={{ color: 'var(--text-secondary)' }}>{g.sponsorName || '—'} / {g.teamName || '—'}</p></div>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Progress ({stats.funded}/{stats.totalMilestones})</span>
+                                <span className="num-display" style={{ fontSize: '0.75rem' }}>{stats.progressPercent}%</span>
+                            </div>
+                            <div className="progress-track"><div className="progress-fill" style={{ width: `${stats.progressPercent}%` }}></div></div>
 
-                {/* Footer */}
-                <div className="text-center pt-16 pb-6">
-                    <p className="text-gray-600 text-sm">GrantChain — Transparent Grant & Fund Tracking on <strong className="text-gray-400">Algorand</strong></p>
-                    <p className="text-gray-700 text-xs mt-1">All transactions are verifiable on the Algorand TestNet blockchain</p>
-                </div>
+                            {g.milestones.length > 0 && (
+                                <div style={{ marginTop: '1rem', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {g.milestones.map(m => (
+                                        <span key={m.id} className={m.status === 'funded' ? 'badge-success' : m.status === 'approved' ? 'badge-accent' : 'badge-muted'}
+                                            style={{ fontSize: '0.625rem' }}>
+                                            {m.name} · {m.amount} ALGO · {m.status.toUpperCase()}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                    All payroll data verifiable on <a href="https://lora.algokit.io/testnet" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Lora Explorer</a> · PayrollStream © 2025
+                </p>
             </div>
         </div>
     );

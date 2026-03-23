@@ -1,5 +1,5 @@
-const STORAGE_KEY = 'algorand_grant_tracker';
-const AUTH_KEY = 'grantchain_auth';
+const STORAGE_KEY = 'payrollstream_data';
+const AUTH_KEY = 'payrollstream_auth';
 
 // ============================================================
 // AUTH SYSTEM
@@ -20,7 +20,7 @@ export function getCurrentUser() {
 
 /**
  * Login a user
- * @param {{ name: string, role: 'sponsor'|'admin'|'team', walletAddress?: string }}
+ * @param {{ name: string, role: 'admin'|'employee', walletAddress?: string }}
  */
 export function loginUser({ name, role, walletAddress = '' }) {
     const user = { name, role, walletAddress, loggedInAt: new Date().toISOString() };
@@ -47,15 +47,15 @@ export function logoutUser() {
 }
 
 // ============================================================
-// DATA STORE
+// DATA STORE — Payrolls (adapted from Grants)
 // ============================================================
 
 function getData() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : { grants: [], nextId: 1 };
+        return raw ? JSON.parse(raw) : { payrolls: [], nextId: 1 };
     } catch {
-        return { grants: [], nextId: 1 };
+        return { payrolls: [], nextId: 1 };
     }
 }
 
@@ -64,26 +64,26 @@ function saveData(data) {
 }
 
 export function getGrants() {
-    return getData().grants;
+    return getData().payrolls;
 }
 
 export function getGrant(id) {
-    return getData().grants.find((g) => g.id === Number(id)) || null;
+    return getData().payrolls.find((g) => g.id === Number(id)) || null;
 }
 
 /**
- * Create a new grant
+ * Create a new payroll
  */
-export function createGrant(grantData) {
+export function createGrant(payrollData) {
     const data = getData();
-    const grant = {
+    const payroll = {
         id: data.nextId,
         status: 'active',
         transactions: [],
         expenses: [],
-        ...grantData,
+        ...payrollData,
         createdAt: new Date().toISOString(),
-        milestones: (grantData.milestones || []).map((m, i) => ({
+        milestones: (payrollData.milestones || []).map((m, i) => ({
             id: i + 1,
             status: 'pending',
             submittedAt: null,
@@ -99,37 +99,37 @@ export function createGrant(grantData) {
             ...m,
         })),
     };
-    data.grants.push(grant);
+    data.payrolls.push(payroll);
     data.nextId += 1;
     saveData(data);
-    return grant;
+    return payroll;
 }
 
 export function updateGrant(id, updates) {
     const data = getData();
-    const index = data.grants.findIndex((g) => g.id === Number(id));
+    const index = data.payrolls.findIndex((g) => g.id === Number(id));
     if (index === -1) return null;
-    data.grants[index] = { ...data.grants[index], ...updates };
+    data.payrolls[index] = { ...data.payrolls[index], ...updates };
     saveData(data);
-    return data.grants[index];
+    return data.payrolls[index];
 }
 
-export function updateMilestone(grantId, milestoneId, updates) {
+export function updateMilestone(payrollId, milestoneId, updates) {
     const data = getData();
-    const grant = data.grants.find((g) => g.id === Number(grantId));
-    if (!grant) return null;
-    const milestone = grant.milestones.find((m) => m.id === Number(milestoneId));
+    const payroll = data.payrolls.find((g) => g.id === Number(payrollId));
+    if (!payroll) return null;
+    const milestone = payroll.milestones.find((m) => m.id === Number(milestoneId));
     if (!milestone) return null;
     Object.assign(milestone, updates);
     saveData(data);
     return milestone;
 }
 
-export function addTransaction(grantId, txn) {
+export function addTransaction(payrollId, txn) {
     const data = getData();
-    const grant = data.grants.find((g) => g.id === Number(grantId));
-    if (!grant) return;
-    grant.transactions.push({
+    const payroll = data.payrolls.find((g) => g.id === Number(payrollId));
+    if (!payroll) return;
+    payroll.transactions.push({
         ...txn,
         timestamp: new Date().toISOString(),
     });
@@ -137,14 +137,14 @@ export function addTransaction(grantId, txn) {
 }
 
 /**
- * Add expense log for a grant (Team role)
+ * Add expense log for a payroll (Employee role)
  */
-export function addExpense(grantId, expense) {
+export function addExpense(payrollId, expense) {
     const data = getData();
-    const grant = data.grants.find((g) => g.id === Number(grantId));
-    if (!grant) return;
-    if (!grant.expenses) grant.expenses = [];
-    grant.expenses.push({
+    const payroll = data.payrolls.find((g) => g.id === Number(payrollId));
+    if (!payroll) return;
+    if (!payroll.expenses) payroll.expenses = [];
+    payroll.expenses.push({
         ...expense,
         id: Date.now(),
         timestamp: new Date().toISOString(),
@@ -153,16 +153,15 @@ export function addExpense(grantId, expense) {
 }
 
 /**
- * Add a DAO vote to a milestone
+ * Add a vote to a milestone
  */
-export function addVote(grantId, milestoneId, vote) {
+export function addVote(payrollId, milestoneId, vote) {
     const data = getData();
-    const grant = data.grants.find((g) => g.id === Number(grantId));
-    if (!grant) return null;
-    const milestone = grant.milestones.find((m) => m.id === Number(milestoneId));
+    const payroll = data.payrolls.find((g) => g.id === Number(payrollId));
+    if (!payroll) return null;
+    const milestone = payroll.milestones.find((m) => m.id === Number(milestoneId));
     if (!milestone) return null;
     if (!milestone.votes) milestone.votes = [];
-    // Prevent double voting
     const existing = milestone.votes.find((v) => v.voter === vote.voter);
     if (existing) {
         existing.decision = vote.decision;
@@ -176,21 +175,21 @@ export function addVote(grantId, milestoneId, vote) {
 
 export function deleteGrant(id) {
     const data = getData();
-    data.grants = data.grants.filter((g) => g.id !== Number(id));
+    data.payrolls = data.payrolls.filter((g) => g.id !== Number(id));
     saveData(data);
 }
 
 /**
- * Calculate grant stats
+ * Calculate payroll stats
  */
-export function getGrantStats(grant) {
-    const totalMilestones = grant.milestones.length;
-    const funded = grant.milestones.filter((m) => m.status === 'funded').length;
-    const approved = grant.milestones.filter((m) => m.status === 'approved').length;
-    const submitted = grant.milestones.filter((m) => m.status === 'submitted').length;
-    const rejected = grant.milestones.filter((m) => m.status === 'rejected').length;
-    const totalFunding = parseFloat(grant.totalFunding) || 0;
-    const releasedAmount = grant.milestones
+export function getGrantStats(payroll) {
+    const totalMilestones = payroll.milestones.length;
+    const funded = payroll.milestones.filter((m) => m.status === 'funded').length;
+    const approved = payroll.milestones.filter((m) => m.status === 'approved').length;
+    const submitted = payroll.milestones.filter((m) => m.status === 'submitted').length;
+    const rejected = payroll.milestones.filter((m) => m.status === 'rejected').length;
+    const totalFunding = parseFloat(payroll.totalFunding) || 0;
+    const releasedAmount = payroll.milestones
         .filter((m) => m.status === 'funded')
         .reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
     const remainingAmount = totalFunding - releasedAmount;
@@ -203,4 +202,27 @@ export function getGrantStats(grant) {
     };
 }
 
+/**
+ * Compute earned salary based on time elapsed (frontend only)
+ * @param {object} payroll - payroll object with startTime, endTime, totalFunding
+ * @returns {{ earned: number, percent: number, rate: number }}
+ */
+export function computeEarnedSalary(payroll) {
+    const now = Date.now();
+    const start = new Date(payroll.startTime || payroll.createdAt).getTime();
+    const end = new Date(payroll.endTime || start + 30 * 24 * 60 * 60 * 1000).getTime();
+    const totalSalary = parseFloat(payroll.totalFunding) || 0;
+    const duration = end - start;
+    if (duration <= 0 || totalSalary <= 0) return { earned: 0, percent: 0, rate: 0 };
 
+    const elapsed = Math.max(0, Math.min(now - start, duration));
+    const rate = totalSalary / duration;  // ALGO per millisecond
+    const earned = rate * elapsed;
+    const percent = (elapsed / duration) * 100;
+
+    return {
+        earned: Math.min(earned, totalSalary),
+        percent: Math.min(percent, 100),
+        rate: rate * 1000, // ALGO per second
+    };
+}

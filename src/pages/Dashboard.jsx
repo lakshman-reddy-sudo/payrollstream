@@ -1,142 +1,99 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getGrants, getGrantStats } from '../utils/store';
+import { getGrants, getGrantStats, computeEarnedSalary } from '../utils/store';
 import { shortAddress, getExplorerTxnUrl } from '../utils/algorand';
 
 export default function Dashboard({ user, walletAddress }) {
     const [grants, setGrants] = useState([]);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all');
+    const [, setTick] = useState(0);
 
-    useEffect(() => {
-        setGrants(getGrants());
-    }, []);
+    useEffect(() => { setGrants(getGrants()); }, []);
+    useEffect(() => { const iv = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(iv); }, []);
 
-    const filteredGrants = grants.filter(g => {
-        const matchesSearch = !search || g.name.toLowerCase().includes(search.toLowerCase());
+    const filtered = grants.filter(g => {
+        const matchSearch = !search || g.name.toLowerCase().includes(search.toLowerCase());
         const stats = getGrantStats(g);
-        const matchesFilter = filter === 'all' ||
-            (filter === 'active' && g.status === 'active') ||
-            (filter === 'completed' && stats.progressPercent === 100) ||
-            (filter === 'draft' && g.status === 'proposed');
-        return matchesSearch && matchesFilter;
+        const matchFilter = filter === 'all'
+            || (filter === 'active' && g.status === 'active')
+            || (filter === 'completed' && stats.progressPercent === 100)
+            || (filter === 'draft' && g.status === 'proposed');
+        return matchSearch && matchFilter;
     });
 
-    const allStats = grants.reduce(
-        (acc, g) => {
-            const s = getGrantStats(g);
-            acc.totalFunding += s.totalFunding;
-            acc.released += s.releasedAmount;
-            acc.remaining += s.remainingAmount;
-            acc.totalGrants += 1;
-            acc.totalMilestones += s.totalMilestones;
-            acc.fundedMilestones += s.funded;
-            acc.pendingApprovals += s.submitted;
-            return acc;
-        },
-        { totalFunding: 0, released: 0, remaining: 0, totalGrants: 0, totalMilestones: 0, fundedMilestones: 0, pendingApprovals: 0 }
-    );
+    const agg = grants.reduce((a, g) => {
+        const s = getGrantStats(g);
+        a.total += s.totalFunding; a.released += s.releasedAmount; a.payrolls += 1;
+        a.milestones += s.totalMilestones; a.funded += s.funded; a.pendingActions += s.submitted;
+        return a;
+    }, { total: 0, released: 0, payrolls: 0, milestones: 0, funded: 0, pendingActions: 0 });
 
-    const getActionItems = () => {
-        const items = [];
-        grants.forEach(g => {
-            g.milestones.forEach(m => {
-                if (user.role === 'admin' && m.status === 'submitted') items.push({ grant: g, milestone: m, action: 'Review & Approve', icon: 'fact_check' });
-                if (user.role === 'sponsor' && m.status === 'approved') items.push({ grant: g, milestone: m, action: 'Release Funds', icon: 'send_money' });
-                if (user.role === 'team' && m.status === 'pending') items.push({ grant: g, milestone: m, action: 'Submit Work', icon: 'upload_file' });
-                if (user.role === 'team' && m.status === 'rejected') items.push({ grant: g, milestone: m, action: 'Resubmit', icon: 'refresh' });
-            });
-        });
-        return items;
-    };
-    const actionItems = getActionItems();
-
-    const statusIcons = { active: 'rocket_launch', proposed: 'edit_document', completed: 'check_circle' };
-    const statusColors = { active: 'cyan', proposed: 'yellow', completed: 'green' };
-    const roleIcons = { sponsor: 'science', admin: 'code', team: 'forest' };
-    const roleColors = { sponsor: 'indigo', admin: 'purple', team: 'green' };
+    // Action items
+    const actions = [];
+    grants.forEach(g => g.milestones.forEach(m => {
+        if (user.role === 'admin' && m.status === 'submitted') actions.push({ g, m, action: 'Review & Approve', icon: 'fact_check' });
+        if (user.role === 'admin' && m.status === 'approved') actions.push({ g, m, action: 'Approve & Release', icon: 'send_money' });
+        if (user.role === 'employee' && m.status === 'pending') actions.push({ g, m, action: 'Submit Work', icon: 'upload_file' });
+        if (user.role === 'employee' && m.status === 'rejected') actions.push({ g, m, action: 'Resubmit', icon: 'refresh' });
+    }));
 
     return (
-        <div className="relative z-10 p-6 lg:p-8 max-w-7xl mx-auto w-full" style={{ animation: 'fadeIn 0.4s ease' }}>
-            {/* Ambient blurs */}
-            <div className="fixed top-[-10%] left-[20%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
-            <div className="fixed bottom-[10%] right-[10%] w-[400px] h-[400px] bg-cyan-900/10 rounded-full blur-[100px] pointer-events-none"></div>
-
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2.5rem 24px', animation: 'fadeUp 0.4s ease' }}>
             {/* Header */}
-            <header className="flex justify-between items-center mb-8">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
-                    <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-                    <p className="text-gray-400 mt-1">Manage your decentralized grants on Algorand</p>
+                    <h1 className="text-h1" style={{ marginBottom: 4 }}>Dashboard</h1>
+                    <p className="text-body-sm" style={{ color: 'var(--text-secondary)' }}>Manage payrolls on Algorand TestNet</p>
                 </div>
-                <div className="flex items-center space-x-4">
-                    <div className="hidden sm:flex items-center space-x-2 px-4 py-2 bg-[#141522] border border-gray-700 rounded-lg text-sm text-gray-300">
-                        <span className="material-symbols-outlined text-green-400 text-lg">wifi</span>
-                        <span>TestNet</span>
-                    </div>
-                    {(user.role === 'sponsor' || user.role === 'admin') && (
-                        <Link to="/create" className="no-underline bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-5 py-2 rounded-lg font-medium shadow-lg shadow-purple-900/30 flex items-center text-sm">
-                            <span className="material-symbols-outlined mr-2 text-[18px]">add</span>
-                            Create Grant
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="badge-accent"><span className="live-dot" style={{ width: 6, height: 6 }}></span> TestNet</span>
+                    {user.role === 'admin' && (
+                        <Link to="/create" className="btn-primary btn-sm">
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span> Create Payroll
                         </Link>
                     )}
                 </div>
-            </header>
+            </div>
 
-            {/* Stat Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <span className="material-symbols-outlined text-6xl text-cyan-400">rocket_launch</span>
+            {/* Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', marginBottom: '2rem' }}>
+                {[
+                    { label: 'Active Payrolls', value: agg.payrolls, sub: `${agg.funded} milestones released`, icon: 'stream' },
+                    { label: 'Pending Actions', value: actions.length, sub: actions.length > 0 ? 'Action required' : 'All clear', icon: 'pending_actions' },
+                    { label: 'Total Funded', value: agg.total, sub: `${agg.released} ALGO released`, icon: 'savings', suffix: 'ALGO' },
+                ].map((s, i) => (
+                    <div key={i} className="card-flat" style={{ padding: '1.5rem', position: 'relative', overflow: 'hidden' }}>
+                        <span className="material-symbols-outlined" style={{ position: 'absolute', top: 12, right: 12, fontSize: 44, color: 'var(--border)', opacity: 0.5 }}>{s.icon}</span>
+                        <p className="text-caption" style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{s.label}</p>
+                        <h2 className="num-display" style={{ fontSize: '2rem', color: 'var(--text-primary)' }}>
+                            {s.value} {s.suffix && <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>{s.suffix}</span>}
+                        </h2>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6 }}>{s.sub}</p>
                     </div>
-                    <p className="text-gray-400 text-sm font-medium mb-1">Active Grants</p>
-                    <h2 className="text-3xl font-bold text-white">{allStats.totalGrants}</h2>
-                    <div className="mt-4 flex items-center text-xs text-green-400 bg-green-400/10 w-max px-2 py-1 rounded-full">
-                        <span className="material-symbols-outlined text-sm mr-1">trending_up</span>
-                        {allStats.fundedMilestones} milestones funded
-                    </div>
-                </div>
-                <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <span className="material-symbols-outlined text-6xl text-purple-400">pending_actions</span>
-                    </div>
-                    <p className="text-gray-400 text-sm font-medium mb-1">Pending Actions</p>
-                    <h2 className="text-3xl font-bold text-white">{actionItems.length}</h2>
-                    <div className="mt-4 flex items-center text-xs text-yellow-400 bg-yellow-400/10 w-max px-2 py-1 rounded-full">
-                        <span className="material-symbols-outlined text-sm mr-1">{actionItems.length > 0 ? 'warning' : 'check'}</span>
-                        {actionItems.length > 0 ? 'Action required' : 'All clear'}
-                    </div>
-                </div>
-                <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <span className="material-symbols-outlined text-6xl text-indigo-400">savings</span>
-                    </div>
-                    <p className="text-gray-400 text-sm font-medium mb-1">Total Funded</p>
-                    <h2 className="text-3xl font-bold text-white">{allStats.totalFunding} <span className="text-lg text-gray-500 font-normal">ALGO</span></h2>
-                    <div className="mt-4 flex items-center text-xs text-gray-400">
-                        <span className="material-symbols-outlined text-sm mr-1">payments</span>
-                        {allStats.released} ALGO released
-                    </div>
-                </div>
+                ))}
             </div>
 
             {/* Action Items */}
-            {actionItems.length > 0 && (
-                <div className="mb-8">
-                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-yellow-400">bolt</span>
-                        Your Action Items
+            {actions.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>bolt</span> Your Actions
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {actionItems.slice(0, 6).map((item, i) => (
-                            <Link key={i} to={`/grant/${item.grant.id}`} className="no-underline">
-                                <div className="glass-card p-4 rounded-xl flex items-center gap-4 border-l-4 border-l-purple-500/50 hover:border-l-purple-400 transition-all">
-                                    <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 flex-shrink-0">
-                                        <span className="material-symbols-outlined">{item.icon}</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+                        {actions.slice(0, 6).map((item, i) => (
+                            <Link key={i} to={`/grant/${item.g.id}`} style={{ textDecoration: 'none' }}>
+                                <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', borderLeft: '3px solid var(--accent)' }}>
+                                    <div style={{
+                                        width: 40, height: 40, borderRadius: '50%',
+                                        background: 'var(--accent-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                    }}>
+                                        <span className="material-symbols-outlined" style={{ color: 'var(--accent)', fontSize: 20 }}>{item.icon}</span>
                                     </div>
-                                    <div className="min-w-0">
-                                        <div className="text-white font-semibold text-sm">{item.action}</div>
-                                        <div className="text-gray-400 text-xs truncate">{item.milestone.name} • {item.grant.name}</div>
-                                        <div className="text-purple-400 text-xs font-mono mt-0.5">{item.milestone.amount} ALGO</div>
+                                    <div style={{ minWidth: 0 }}>
+                                        <p style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-primary)' }}>{item.action}</p>
+                                        <p className="text-body-sm" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.m.name} · {item.g.name}</p>
+                                        <p className="num-display" style={{ fontSize: '0.8125rem', color: 'var(--accent)', marginTop: 2 }}>{item.m.amount} ALGO</p>
                                     </div>
                                 </div>
                             </Link>
@@ -146,79 +103,70 @@ export default function Dashboard({ user, walletAddress }) {
             )}
 
             {/* Search & Filter */}
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <div className="relative w-full sm:w-96">
-                    <span className="material-symbols-outlined absolute left-3 top-2.5 text-gray-500">search</span>
-                    <input
-                        className="w-full bg-[#141522] border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block pl-10 p-2.5 placeholder-gray-500 outline-none"
-                        placeholder="Search grants by name..."
-                        value={search} onChange={e => setSearch(e.target.value)}
-                    />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', maxWidth: 360, width: '100%' }}>
+                    <span className="material-symbols-outlined" style={{ position: 'absolute', left: 14, top: 12, color: 'var(--text-muted)', fontSize: 20 }}>search</span>
+                    <input className="input" style={{ paddingLeft: 42 }} placeholder="Search payrolls…" value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
-                <div className="flex space-x-3 w-full sm:w-auto overflow-x-auto">
+                <div style={{ display: 'flex', gap: 6 }}>
                     {['all', 'active', 'completed', 'draft'].map(f => (
                         <button key={f} onClick={() => setFilter(f)}
-                            className={`px-4 py-2 text-sm rounded-lg whitespace-nowrap font-medium transition-colors ${filter === f
-                                ? 'bg-purple-600 text-white'
-                                : 'bg-[#141522] border border-gray-700 hover:bg-[#1E2532] text-gray-300'
-                                }`}>
-                            {f.charAt(0).toUpperCase() + f.slice(1)}
+                            className={filter === f ? 'badge-accent' : 'badge-muted'}
+                            style={{ cursor: 'pointer', padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                            {f}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Grant Cards */}
-            {filteredGrants.length === 0 ? (
-                <div className="text-center py-20">
-                    <span className="material-symbols-outlined text-6xl text-gray-600 mb-4 block">inbox</span>
-                    <h3 className="text-xl font-bold text-gray-400 mb-2">No grants found</h3>
-                    <p className="text-gray-500 mb-6">{search ? 'Try a different search term' : 'Create your first grant to get started'}</p>
-                    {user.role === 'sponsor' && (
-                        <Link to="/create" className="no-underline bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-medium inline-flex items-center gap-2">
-                            <span className="material-symbols-outlined">add</span> Create Grant
-                        </Link>
-                    )}
+            {/* Payroll Cards */}
+            {filtered.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '5rem 0' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 64, color: 'var(--border)', display: 'block', marginBottom: 16 }}>inbox</span>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>No payrolls found</h3>
+                    <p className="text-body-sm" style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                        {search ? 'Try a different search' : 'Create your first payroll to get started'}
+                    </p>
+                    {user.role === 'admin' && <Link to="/create" className="btn-primary btn-sm"><span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span> Create Payroll</Link>}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredGrants.map((grant) => {
-                        const stats = getGrantStats(grant);
-                        const sColor = statusColors[grant.status] || 'gray';
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
+                    {filtered.map(g => {
+                        const stats = getGrantStats(g);
+                        const sal = computeEarnedSalary(g);
                         return (
-                            <Link key={grant.id} to={`/grant/${grant.id}`} className="no-underline">
-                                <article className="glass-panel rounded-2xl border border-gray-800 hover:border-purple-500/50 transition-colors group p-5 flex flex-col h-full">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="flex items-center space-x-3">
-                                            <div className={`w-10 h-10 rounded-lg bg-${sColor}-900/50 flex items-center justify-center text-${sColor}-400 border border-${sColor}-500/20`}>
-                                                <span className="material-symbols-outlined">{statusIcons[grant.status] || 'folder'}</span>
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-white text-lg leading-tight">{grant.name}</h3>
-                                                <p className="text-xs text-gray-500 mt-0.5">{grant.teamName || 'No team'}</p>
-                                            </div>
+                            <Link key={g.id} to={`/grant/${g.id}`} style={{ textDecoration: 'none' }}>
+                                <article className="card" style={{ padding: '1.5rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                        <div>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{g.name}</h3>
+                                            <p className="text-body-sm" style={{ color: 'var(--text-muted)', marginTop: 4 }}>{g.teamName || 'No employee'}</p>
                                         </div>
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium bg-${sColor}-500/10 text-${sColor}-400 border border-${sColor}-500/20 capitalize`}>
-                                            {grant.status || 'Active'}
-                                        </span>
+                                        <span className="badge-accent">{g.status || 'Active'}</span>
                                     </div>
-                                    <p className="text-gray-400 text-sm mb-6 line-clamp-2">{grant.description}</p>
-                                    <div className="mt-auto">
-                                        <div className="flex justify-between text-xs text-gray-400 mb-2">
-                                            <span>Milestones ({stats.funded}/{stats.totalMilestones})</span>
-                                            <span className="text-white">{stats.progressPercent}%</span>
+                                    <p className="text-body-sm line-clamp-2" style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>{g.description}</p>
+
+                                    {/* Salary ticker */}
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <p style={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Earned Salary</p>
+                                        <p className="salary-ticker-sm">{sal.earned.toFixed(4)} <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>ALGO</span></p>
+                                    </div>
+
+                                    <div style={{ marginTop: 'auto' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Milestones ({stats.funded}/{stats.totalMilestones})</span>
+                                            <span className="num-display" style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{stats.progressPercent}%</span>
                                         </div>
-                                        <div className="w-full h-2 rounded-full progress-bar-bg overflow-hidden mb-6">
-                                            <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${stats.progressPercent}%` }}></div>
-                                        </div>
-                                        <div className="flex items-center justify-between border-t border-gray-700/50 pt-4">
+                                        <div className="progress-track"><div className="progress-fill" style={{ width: `${stats.progressPercent}%` }}></div></div>
+                                        <div className="divider" style={{ margin: '1rem 0' }}></div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                             <div>
-                                                <p className="text-xs text-gray-500 uppercase tracking-wide">Funding</p>
-                                                <p className="text-lg font-bold text-white">{stats.totalFunding} <span className="text-xs text-gray-400 font-normal">ALGO</span></p>
+                                                <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total</p>
+                                                <p className="num-display" style={{ fontSize: '1rem' }}>{stats.totalFunding} <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>ALGO</span></p>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-500 uppercase tracking-wide">Escrow</p>
-                                                <span className="text-xs font-mono text-gray-400">{shortAddress(grant.escrowAddress)}</span>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Escrow</p>
+                                                <p className="text-mono" style={{ color: 'var(--text-muted)' }}>{shortAddress(g.escrowAddress)}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -227,65 +175,65 @@ export default function Dashboard({ user, walletAddress }) {
                         );
                     })}
 
-                    {/* Create New Card */}
-                    <Link to="/create" className="no-underline">
-                        <div className="border border-dashed border-gray-700 rounded-2xl p-5 flex flex-col items-center justify-center h-full hover:bg-white/5 transition-colors group min-h-[250px]">
-                            <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                <span className="material-symbols-outlined text-gray-400 group-hover:text-white">add</span>
+                    {/* New payroll card */}
+                    <Link to="/create" style={{ textDecoration: 'none' }}>
+                        <div style={{
+                            border: '1.5px dashed var(--border)', borderRadius: 'var(--radius-lg)',
+                            padding: '1.5rem', display: 'flex', flexDirection: 'column',
+                            alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 250,
+                            transition: 'all 0.25s',
+                        }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: '50%',
+                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem',
+                            }}>
+                                <span className="material-symbols-outlined" style={{ color: 'var(--text-secondary)' }}>add</span>
                             </div>
-                            <h3 className="text-gray-300 font-medium">Create New Grant</h3>
-                            <p className="text-gray-500 text-sm text-center mt-2 px-6">Start a new project and define milestones.</p>
+                            <p style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Create New Payroll</p>
+                            <p className="text-body-sm" style={{ color: 'var(--text-muted)', marginTop: 6 }}>Define salary and milestones</p>
                         </div>
                     </Link>
                 </div>
             )}
 
             {/* Recent Transactions */}
-            {grants.some(g => g.transactions && g.transactions.length > 0) && (
-                <div className="mt-10">
-                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-indigo-400">history_edu</span>
-                        Recent Transactions
+            {grants.some(g => g.transactions?.length > 0) && (
+                <div style={{ marginTop: '2.5rem' }}>
+                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>history</span> Recent Transactions
                     </h3>
-                    <div className="glass-panel rounded-2xl p-6 overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                    <div className="card-flat" style={{ padding: '1.25rem', overflow: 'auto' }}>
+                        <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                             <thead>
-                                <tr className="text-xs font-semibold text-gray-500 border-b border-gray-700">
-                                    <th className="pb-3 pl-2">Type</th>
-                                    <th className="pb-3">Project</th>
-                                    <th className="pb-3">Amount</th>
-                                    <th className="pb-3">Note</th>
-                                    <th className="pb-3">Date</th>
-                                    <th className="pb-3 pr-2 text-right">Txn ID</th>
+                                <tr className="text-caption" style={{ color: 'var(--text-muted)' }}>
+                                    <th style={{ padding: '0 0 12px' }}>Type</th>
+                                    <th style={{ padding: '0 0 12px' }}>Payroll</th>
+                                    <th style={{ padding: '0 0 12px' }}>Amount</th>
+                                    <th style={{ padding: '0 0 12px' }}>Note</th>
+                                    <th style={{ padding: '0 0 12px' }}>Date</th>
+                                    <th style={{ padding: '0 0 12px', textAlign: 'right' }}>Txn ID</th>
                                 </tr>
                             </thead>
-                            <tbody className="text-sm">
-                                {grants
-                                    .flatMap(g => (g.transactions || []).map(t => ({ ...t, grantName: g.name })))
-                                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-                                    .slice(0, 10)
+                            <tbody>
+                                {grants.flatMap(g => (g.transactions || []).map(t => ({ ...t, grantName: g.name })))
+                                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 10)
                                     .map((txn, i) => (
-                                        <tr key={i} className="group hover:bg-white/5 transition-colors border-b border-gray-800/50">
-                                            <td className="py-4 pl-2">
-                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${txn.type === 'fund'
-                                                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                                    : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                                    }`}>
-                                                    <span className="material-symbols-outlined text-[14px]">{txn.type === 'fund' ? 'payments' : 'send_money'}</span>
-                                                    {txn.type === 'fund' ? 'Fund' : 'Release'}
-                                                </span>
+                                        <tr key={i}>
+                                            <td style={{ padding: '10px 0' }}>
+                                                <span className={txn.type === 'fund' ? 'badge-success' : 'badge-accent'} style={{ fontSize: '0.6875rem' }}>{txn.type === 'fund' ? 'Fund' : 'Release'}</span>
                                             </td>
-                                            <td className="py-4 text-white font-medium">{txn.grantName}</td>
-                                            <td className="py-4 text-white font-medium">{txn.amount} ALGO</td>
-                                            <td className="py-4 text-gray-400 max-w-xs truncate">{txn.note}</td>
-                                            <td className="py-4 text-gray-400">{new Date(txn.timestamp).toLocaleDateString()}</td>
-                                            <td className="py-4 pr-2 text-right">
+                                            <td className="text-body-sm" style={{ padding: '10px 0', color: 'var(--text-primary)' }}>{txn.grantName}</td>
+                                            <td className="num-display" style={{ padding: '10px 0', color: 'var(--text-primary)' }}>{txn.amount} ALGO</td>
+                                            <td className="text-body-sm" style={{ padding: '10px 0', color: 'var(--text-secondary)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.note}</td>
+                                            <td className="text-body-sm" style={{ padding: '10px 0', color: 'var(--text-secondary)' }}>{new Date(txn.timestamp).toLocaleDateString()}</td>
+                                            <td style={{ padding: '10px 0', textAlign: 'right' }}>
                                                 {txn.txnId ? (
                                                     <a href={getExplorerTxnUrl(txn.txnId)} target="_blank" rel="noreferrer"
-                                                        className="text-xs font-mono text-indigo-400 hover:text-indigo-300 no-underline flex items-center gap-1 justify-end">
-                                                        {shortAddress(txn.txnId)} <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                                                        className="text-mono" style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                        {shortAddress(txn.txnId)} <span className="material-symbols-outlined" style={{ fontSize: 12 }}>open_in_new</span>
                                                     </a>
-                                                ) : <span className="text-xs text-gray-600">Off-chain</span>}
+                                                ) : <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Off-chain</span>}
                                             </td>
                                         </tr>
                                     ))}

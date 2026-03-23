@@ -1,220 +1,140 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo } from 'react';
 import { getGrants, getGrantStats } from '../utils/store';
-import { shortAddress, getExplorerTxnUrl } from '../utils/algorand';
-
-const COLORS = { funded: '#8b5cf6', approved: '#10b981', submitted: '#3b82f6', pending: '#f59e0b', rejected: '#ef4444' };
-const CATEGORY_COLORS = { General: '#8b5cf6', Hardware: '#3b82f6', Software: '#10b981', Services: '#f59e0b', Travel: '#ec4899', Other: '#64748b' };
 
 export default function Analytics({ user }) {
-    const [grants, setGrants] = useState([]);
-    useEffect(() => { setGrants(getGrants()); }, []);
+    const grants = useMemo(() => getGrants(), []);
 
-    const allMilestones = grants.flatMap(g => g.milestones || []);
-    const allExpenses = grants.flatMap(g => g.expenses || []);
-    const allTransactions = grants.flatMap(g => (g.transactions || []).map(t => ({ ...t, grantName: g.name })));
+    const agg = useMemo(() => {
+        const s = grants.reduce((a, g) => {
+            const st = getGrantStats(g);
+            a.payrolls += 1; a.total += st.totalFunding; a.released += st.releasedAmount;
+            a.remaining += st.remainingAmount; a.milestones += st.totalMilestones;
+            a.funded += st.funded; a.approved += st.approved; a.submitted += st.submitted;
+            a.rejected += st.rejected; a.pending += st.pending;
+            return a;
+        }, { payrolls: 0, total: 0, released: 0, remaining: 0, milestones: 0, funded: 0, approved: 0, submitted: 0, rejected: 0, pending: 0 });
+        s.releaseRate = s.total > 0 ? Math.round((s.released / s.total) * 100) : 0;
+        return s;
+    }, [grants]);
 
-    const statusCounts = { funded: 0, approved: 0, submitted: 0, pending: 0, rejected: 0 };
-    allMilestones.forEach(m => { if (statusCounts[m.status] !== undefined) statusCounts[m.status]++; });
-    const totalMilestones = allMilestones.length;
+    const topPayrolls = useMemo(() => [...grants].sort((a, b) => (parseFloat(b.totalFunding) || 0) - (parseFloat(a.totalFunding) || 0)).slice(0, 5), [grants]);
 
-    const totalFunding = grants.reduce((s, g) => s + (parseFloat(g.totalFunding) || 0), 0);
-    const totalReleased = grants.reduce((s, g) => s + getGrantStats(g).releasedAmount, 0);
-    const totalExpenses = allExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const allTxns = useMemo(() =>
+        grants.flatMap(g => (g.transactions || []).map(t => ({ ...t, payrollName: g.name })))
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 15),
+        [grants]);
 
-    const categoryMap = {};
-    allExpenses.forEach(e => { const cat = e.category || 'General'; categoryMap[cat] = (categoryMap[cat] || 0) + (parseFloat(e.amount) || 0); });
-    const categories = Object.entries(categoryMap).sort((a, b) => b[1] - a[1]);
-    const maxCategoryAmount = categories.length > 0 ? categories[0][1] : 1;
+    if (grants.length === 0) return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+            <div style={{ textAlign: 'center' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 64, color: 'var(--border)', display: 'block', marginBottom: 16 }}>bar_chart</span>
+                <h3 className="text-h3" style={{ color: 'var(--text-secondary)' }}>No data yet</h3>
+                <p className="text-body-sm" style={{ color: 'var(--text-muted)' }}>Create your first payroll to see analytics</p>
+            </div>
+        </div>
+    );
 
-    const grantUtilization = grants.map(g => {
-        const stats = getGrantStats(g);
-        return { name: g.name, total: stats.totalFunding, released: stats.releasedAmount, remaining: stats.remainingAmount, progress: stats.progressPercent };
-    });
-
-    const DonutChart = ({ data, size = 180 }) => {
-        const total = Object.values(data).reduce((s, v) => s + v, 0);
-        if (total === 0) return <div className="text-center text-gray-500 py-10">No milestones yet</div>;
-        const radius = 60, cx = size / 2, cy = size / 2;
-        let cumulative = 0;
-        const segments = [];
-        Object.entries(data).forEach(([status, count]) => {
-            if (count === 0) return;
-            const pct = count / total;
-            const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
-            cumulative += pct;
-            const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
-            const largeArc = pct > 0.5 ? 1 : 0;
-            const x1 = cx + radius * Math.cos(startAngle), y1 = cy + radius * Math.sin(startAngle);
-            const x2 = cx + radius * Math.cos(endAngle), y2 = cy + radius * Math.sin(endAngle);
-            segments.push(<path key={status} d={`M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`} fill={COLORS[status]} opacity={0.85} />);
-        });
+    const Bar = ({ label, count, total, color }) => {
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
         return (
-            <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-                {segments}
-                <circle cx={cx} cy={cy} r={35} fill="#141522" />
-                <text x={cx} y={cy - 6} textAnchor="middle" fill="white" fontSize="18" fontWeight="700">{total}</text>
-                <text x={cx} y={cy + 12} textAnchor="middle" fill="#64748b" fontSize="9">milestones</text>
-            </svg>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', width: 72, textAlign: 'right' }}>{label}</span>
+                <div style={{ flex: 1, height: 20, background: 'rgba(255,255,255,0.04)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 'var(--radius-full)', transition: 'width 0.5s ease' }}></div>
+                </div>
+                <span className="num-display" style={{ fontSize: '0.875rem', minWidth: 36, textAlign: 'right' }}>{count}</span>
+            </div>
         );
     };
 
     return (
-        <div className="relative z-10 p-6 lg:p-8 max-w-7xl mx-auto w-full" style={{ animation: 'fadeIn 0.4s ease' }}>
-            <div className="fixed top-[-10%] right-[20%] w-[500px] h-[500px] bg-indigo-900/15 rounded-full blur-[120px] pointer-events-none"></div>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2.5rem 24px', animation: 'fadeUp 0.4s ease' }}>
+            <div style={{ marginBottom: '2rem' }}>
+                <h1 className="text-h1" style={{ marginBottom: 4 }}>Payroll Analytics</h1>
+                <p className="text-body-sm" style={{ color: 'var(--text-secondary)' }}>Salary distribution, milestone progress, and audit data.</p>
+            </div>
 
-            <header className="mb-8">
-                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                    <span className="material-symbols-outlined text-3xl text-indigo-400">bar_chart</span>
-                    Analytics Dashboard
-                </h1>
-                <p className="text-gray-400 mt-1">Fund utilization, milestone progress, and spending insights</p>
-            </header>
-
-            {/* Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            {/* Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '2rem' }}>
                 {[
-                    { label: 'Total Grants', value: grants.length, icon: 'inventory_2', color: 'purple' },
-                    { label: 'Total Funding', value: `${totalFunding.toFixed(1)} ALGO`, icon: 'savings', color: 'cyan' },
-                    { label: 'Released', value: `${totalReleased.toFixed(1)} ALGO`, icon: 'payments', color: 'green' },
-                    { label: 'Expenses', value: `${totalExpenses.toFixed(1)} ALGO`, icon: 'receipt_long', color: 'yellow' },
+                    { label: 'Total Payrolls', value: agg.payrolls, icon: 'stream' },
+                    { label: 'Total Funded', value: `${agg.total}`, suffix: 'ALGO', icon: 'savings' },
+                    { label: 'Released', value: `${agg.released}`, suffix: 'ALGO', icon: 'send_money' },
+                    { label: 'Release Rate', value: `${agg.releaseRate}%`, icon: 'trending_up' },
                 ].map((s, i) => (
-                    <div key={i} className="glass-panel p-5 rounded-2xl relative overflow-hidden group">
-                        <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <span className={`material-symbols-outlined text-5xl text-${s.color}-400`}>{s.icon}</span>
-                        </div>
-                        <p className="text-gray-400 text-sm font-medium mb-1">{s.label}</p>
-                        <h2 className="text-2xl font-bold text-white">{s.value}</h2>
+                    <div key={i} className="card-flat" style={{ padding: '1.5rem', position: 'relative', overflow: 'hidden' }}>
+                        <span className="material-symbols-outlined" style={{ position: 'absolute', top: 10, right: 10, fontSize: 40, color: 'var(--border)', opacity: 0.5 }}>{s.icon}</span>
+                        <p className="text-caption" style={{ color: 'var(--text-secondary)', marginBottom: 4 }}>{s.label}</p>
+                        <h2 className="num-display" style={{ fontSize: '1.75rem' }}>
+                            {s.value} {s.suffix && <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>{s.suffix}</span>}
+                        </h2>
                     </div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-                {/* Donut */}
-                <div className="glass-panel rounded-2xl p-6 shadow-xl">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-indigo-400">donut_large</span>
-                        Milestone Status
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                {/* Milestone Distribution */}
+                <div className="card-flat" style={{ padding: '2rem' }}>
+                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>pie_chart</span> Milestone Status
                     </h3>
-                    <div className="flex items-center gap-8 flex-wrap">
-                        <DonutChart data={statusCounts} />
-                        <div className="flex flex-col gap-3">
-                            {Object.entries(statusCounts).map(([status, count]) => (
-                                <div key={status} className="flex items-center gap-3 text-sm">
-                                    <div className="w-3 h-3 rounded" style={{ background: COLORS[status] }}></div>
-                                    <span className="text-gray-400 capitalize w-20">{status}</span>
-                                    <span className="text-white font-bold">{count}</span>
-                                    <span className="text-gray-600 text-xs">({totalMilestones > 0 ? Math.round(count / totalMilestones * 100) : 0}%)</span>
-                                </div>
-                            ))}
-                        </div>
+                    <Bar label="Released" count={agg.funded} total={agg.milestones} color="var(--success)" />
+                    <Bar label="Approved" count={agg.approved} total={agg.milestones} color="var(--accent)" />
+                    <Bar label="Submitted" count={agg.submitted} total={agg.milestones} color="var(--warning)" />
+                    <Bar label="Pending" count={agg.pending} total={agg.milestones} color="var(--text-muted)" />
+                    <Bar label="Rejected" count={agg.rejected} total={agg.milestones} color="var(--error)" />
+                    <div className="divider" style={{ margin: '1rem 0' }}></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Total Milestones</span>
+                        <span className="num-display" style={{ fontSize: '0.8125rem' }}>{agg.milestones}</span>
                     </div>
                 </div>
 
-                {/* Expense Breakdown */}
-                <div className="glass-panel rounded-2xl p-6 shadow-xl">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-yellow-400">pie_chart</span>
-                        Expense Breakdown
+                {/* Top Payrolls */}
+                <div className="card-flat" style={{ padding: '2rem' }}>
+                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>leaderboard</span> Top Payrolls
                     </h3>
-                    {categories.length === 0 ? (
-                        <div className="text-center text-gray-500 py-10">No expenses logged yet</div>
-                    ) : (
-                        <div className="space-y-4">
-                            {categories.map(([cat, amount]) => (
-                                <div key={cat}>
-                                    <div className="flex justify-between text-sm mb-1">
-                                        <span className="text-gray-400">{cat}</span>
-                                        <span className="text-white font-semibold">{amount.toFixed(1)} ALGO</span>
-                                    </div>
-                                    <div className="w-full h-2 rounded-full progress-bar-bg overflow-hidden">
-                                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(amount / maxCategoryAmount) * 100}%`, background: CATEGORY_COLORS[cat] || '#8b5cf6' }}></div>
+                    {topPayrolls.map((g, i) => {
+                        const s = getGrantStats(g);
+                        return (
+                            <div key={g.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <span className="step-circle" style={{ width: 28, height: 28, fontSize: '0.6875rem' }}>{i + 1}</span>
+                                    <div>
+                                        <p className="text-body-sm" style={{ fontWeight: 600 }}>{g.name}</p>
+                                        <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{g.teamName}</p>
                                     </div>
                                 </div>
-                            ))}
-                            <div className="border-t border-white/10 pt-3 flex justify-between text-sm font-bold">
-                                <span className="text-gray-400">Total</span><span className="text-white">{totalExpenses.toFixed(1)} ALGO</span>
+                                <span className="num-display" style={{ fontSize: '0.875rem' }}>{s.totalFunding} <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>ALGO</span></span>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Fund Utilization */}
-            <div className="glass-panel rounded-2xl p-6 shadow-xl mb-10">
-                <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-cyan-400">tracking_adjustments</span>
-                    Fund Utilization per Grant
-                </h3>
-                {grantUtilization.length === 0 ? (
-                    <div className="text-center text-gray-500 py-10">No grants yet</div>
-                ) : (
-                    <div className="space-y-6">
-                        {grantUtilization.map((g, i) => (
-                            <div key={i}>
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-white font-semibold">{g.name}</span>
-                                    <span className="text-sm text-gray-400">
-                                        {g.released.toFixed(1)} / {g.total.toFixed(1)} ALGO ({g.progress}%)
-                                    </span>
-                                </div>
-                                <div className="w-full h-4 rounded-full progress-bar-bg overflow-hidden mb-2">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-700" style={{ width: `${g.total > 0 ? (g.released / g.total) * 100 : 0}%` }}></div>
-                                </div>
-                                <div className="flex gap-6 text-xs text-gray-500">
-                                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Released: {g.released.toFixed(1)} ALGO</span>
-                                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-600"></span>Remaining: {g.remaining.toFixed(1)} ALGO</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Recent Transactions */}
-            <div className="glass-panel rounded-2xl p-6 shadow-xl">
-                <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-purple-400">history_edu</span>
-                    Recent Transactions
-                </h3>
-                {allTransactions.length === 0 ? (
-                    <div className="text-center text-gray-500 py-10">No transactions yet</div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="text-xs font-semibold text-gray-500 border-b border-gray-700">
-                                    <th className="pb-3 pl-2">Grant</th><th className="pb-3">Type</th><th className="pb-3">Amount</th><th className="pb-3">Note</th><th className="pb-3">Date</th><th className="pb-3 pr-2 text-right">Txn</th>
+            {/* Transactions */}
+            {allTxns.length > 0 && (
+                <div className="card-flat" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>receipt_long</span> Transaction Log
+                    </h3>
+                    <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                        <thead><tr className="text-caption" style={{ color: 'var(--text-muted)' }}><th style={{ padding: '0 0 10px' }}>Type</th><th style={{ padding: '0 0 10px' }}>Payroll</th><th style={{ padding: '0 0 10px' }}>Amount</th><th style={{ padding: '0 0 10px' }}>Note</th><th style={{ padding: '0 0 10px', textAlign: 'right' }}>Date</th></tr></thead>
+                        <tbody>
+                            {allTxns.map((txn, i) => (
+                                <tr key={i}>
+                                    <td style={{ padding: '10px 0' }}><span className={txn.type === 'fund' ? 'badge-success' : 'badge-accent'} style={{ fontSize: '0.625rem' }}>{txn.type === 'fund' ? 'Fund' : 'Release'}</span></td>
+                                    <td className="text-body-sm" style={{ padding: '10px 0' }}>{txn.payrollName}</td>
+                                    <td className="num-display" style={{ padding: '10px 0' }}>{txn.amount} ALGO</td>
+                                    <td className="text-body-sm" style={{ padding: '10px 0', color: 'var(--text-secondary)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.note}</td>
+                                    <td className="text-body-sm" style={{ padding: '10px 0', textAlign: 'right', color: 'var(--text-secondary)' }}>{new Date(txn.timestamp).toLocaleDateString()}</td>
                                 </tr>
-                            </thead>
-                            <tbody className="text-sm">
-                                {allTransactions.slice(0, 20).map((txn, i) => (
-                                    <tr key={i} className="hover:bg-white/5 transition-colors border-b border-gray-800/50">
-                                        <td className="py-3 pl-2 text-white font-medium max-w-[150px] truncate">{txn.grantName}</td>
-                                        <td className="py-3">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${txn.type === 'fund' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>
-                                                <span className="material-symbols-outlined text-[14px]">{txn.type === 'fund' ? 'payments' : 'send_money'}</span>
-                                                {txn.type === 'fund' ? 'Fund' : 'Release'}
-                                            </span>
-                                        </td>
-                                        <td className="py-3 text-white font-medium">{txn.amount} ALGO</td>
-                                        <td className="py-3 text-gray-400 max-w-[200px] truncate">{txn.note}</td>
-                                        <td className="py-3 text-gray-400">{new Date(txn.timestamp).toLocaleDateString()}</td>
-                                        <td className="py-3 pr-2 text-right">
-                                            {txn.txnId ? (
-                                                <a href={getExplorerTxnUrl(txn.txnId)} target="_blank" rel="noreferrer"
-                                                    className="text-xs font-mono text-indigo-400 hover:text-indigo-300 no-underline flex items-center gap-1 justify-end">
-                                                    {shortAddress(txn.txnId)} <span className="material-symbols-outlined text-[12px]">open_in_new</span>
-                                                </a>
-                                            ) : <span className="text-xs text-gray-600">—</span>}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }
