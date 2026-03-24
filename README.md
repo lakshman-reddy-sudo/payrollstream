@@ -1,4 +1,4 @@
-# PayrollStream 💸
+# PayrollStream 
 
 **On-Chain Salary Verification · Algorand TestNet**
 
@@ -12,49 +12,49 @@ PayrollStream is a milestone-based payroll streaming platform built on Algorand.
 
 ---
 
-## ✨ Features
+## Features
 
-### 🔄 Live Salary Streaming
+### Live Salary Streaming
 - Real-time salary ticker that accrues per-second based on payroll start/end dates
 - Visual progress bar showing percentage of salary earned
 - Live rate display (ALGO/second)
 
-### 🏗️ Milestone-Based Verification
+### Milestone-Based Verification
 - Define payroll milestones with percentage-based allocation
 - Full workflow: **Submit → Approve → Release** (or Reject → Resubmit)
 - Each milestone release is an independent on-chain transaction
 
-### 👤 Role-Based Access
+### Role-Based Access
 | Role | Capabilities |
 |------|-------------|
 | **Admin (Employer)** | Create payrolls, fund contracts, review submissions, approve/reject milestones, release salary, mark early completion |
 | **Employee** | View earned salary, submit milestone work, log expenses, request payouts |
 
-### ⚡ Admin Early Completion
+### Admin Early Completion
 - Admins can **"Mark Complete Early"** when employees finish ahead of schedule
 - Instantly sets the salary ticker to 100% — no waiting for the time limit
 - Enables immediate full payout
 
-### 🔗 On-Chain Verification
+### On-Chain Verification
 - All salary releases via Algorand transactions
 - **Lora Explorer** integration for transaction composition and verification
 - Paste transaction IDs for on-chain proof — verified in real-time
 - Full audit trail with clickable Lora links
 
-### 📊 Analytics Dashboard
+### Analytics Dashboard
 - Aggregate payroll statistics (total funded, released, release rate)
 - Milestone status distribution (bar chart visualization)
 - Top payrolls leaderboard
 - Complete transaction log
 
-### 🌐 Public Transparency View
+### Public Transparency View
 - Publicly accessible view of all payrolls — no login required
 - Live salary tickers, milestone progress, and on-chain data
 - Full transparency for stakeholders
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Technology | Purpose |
 |-----------|---------|
@@ -138,7 +138,7 @@ graph LR
 
 ---
 
-## 🎨 Design System
+## Design System
 
 **AlgoID-Inspired Dark Theme** with:
 - Deep obsidian backgrounds (`#060d0b`, `#0c1614`)
@@ -150,7 +150,7 @@ graph LR
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 PayrollStream/
@@ -177,7 +177,7 @@ PayrollStream/
 
 ---
 
-## 🔑 Key Functions
+## Key Functions
 
 | Function | File | Purpose |
 |----------|------|---------|
@@ -191,9 +191,8 @@ PayrollStream/
 
 ---
 
-## 📜 License
+## License
 
-MIT © 2025 PayrollStream
 
 ---
 
