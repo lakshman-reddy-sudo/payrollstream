@@ -299,7 +299,7 @@ textarea.input {
   color: var(--text-primary) !important;
 }
 
-input[type="text"].input {
+input.input {
   background-color: var(--bg-input) !important;
   color: var(--text-primary) !important;
   width: 100% !important;
@@ -366,15 +366,24 @@ select.input { cursor: pointer; }
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.70);
-  backdrop-filter: blur(10px);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 200;
   padding: 24px;
 }
+.modal-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.70);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
 .modal-content {
+  position: relative;
+  z-index: 1;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);

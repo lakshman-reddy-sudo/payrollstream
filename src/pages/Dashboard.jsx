@@ -106,7 +106,7 @@ export default function Dashboard({ user, walletAddress }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', maxWidth: 360, width: '100%' }}>
                     <span className="material-symbols-outlined" style={{ position: 'absolute', left: 14, top: 12, color: 'var(--text-muted)', fontSize: 20 }}>search</span>
-                    <input className="input" style={{ paddingLeft: 42 }} placeholder="Search payrolls…" value={search} onChange={e => setSearch(e.target.value)} />
+                    <input type="text" className="input" style={{ paddingLeft: 42 }} placeholder="Search payrolls…" value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                     {['all', 'active', 'completed', 'draft'].map(f => (

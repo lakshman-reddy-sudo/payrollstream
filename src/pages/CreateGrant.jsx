@@ -107,7 +107,7 @@ export default function CreateGrant({ user, walletAddress }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
                             <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Payroll Name *</label>
-                            <input className="input" name="name" value={form.name} onChange={handleChange} placeholder="e.g. Q1 2025 Developer Salary" />
+                            <input type="text" className="input" name="name" value={form.name} onChange={handleChange} placeholder="e.g. Q1 2025 Developer Salary" />
                         </div>
                         <div>
                             <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Description</label>
@@ -143,11 +143,11 @@ export default function CreateGrant({ user, walletAddress }) {
                         <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: i === 0 ? '1rem' : 0 }}>
                             <div>
                                 <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>{p.label} Name</label>
-                                <input className="input" name={p.nameF} value={form[p.nameF]} onChange={handleChange} placeholder={p.ph} />
+                                <input type="text" className="input" name={p.nameF} value={form[p.nameF]} onChange={handleChange} placeholder={p.ph} />
                             </div>
                             <div>
                                 <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>{p.label} Wallet</label>
-                                <input className="input text-mono" style={{ fontSize: '0.75rem' }} name={p.walletF} value={form[p.walletF]} onChange={handleChange} placeholder="Algorand address" />
+                                <input type="text" className="input text-mono" style={{ fontSize: '0.75rem' }} name={p.walletF} value={form[p.walletF]} onChange={handleChange} placeholder="Algorand address" />
                             </div>
                         </div>
                     ))}
@@ -175,8 +175,8 @@ export default function CreateGrant({ user, walletAddress }) {
                                     )}
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                                    <input className="input" value={m.name} onChange={e => updateMilestone(i, 'name', e.target.value)} placeholder="Phase name *" />
-                                    <input className="input" value={m.description} onChange={e => updateMilestone(i, 'description', e.target.value)} placeholder="What will be delivered?" />
+                                    <input type="text" className="input" value={m.name} onChange={e => updateMilestone(i, 'name', e.target.value)} placeholder="Phase name *" />
+                                    <input type="text" className="input" value={m.description} onChange={e => updateMilestone(i, 'description', e.target.value)} placeholder="What will be delivered?" />
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                         <input type="number" className="input" style={{ maxWidth: 100 }} value={m.percentage} onChange={e => updateMilestone(i, 'percentage', e.target.value)} min="0" max="100" />
                                         <span className="text-body-sm" style={{ color: 'var(--text-secondary)' }}>

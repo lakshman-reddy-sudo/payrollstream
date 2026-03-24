@@ -90,7 +90,7 @@ export default function Login({ onLogin, onWalletConnect }) {
                     {/* Name */}
                     <div style={{ marginBottom: '1.25rem' }}>
                         <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 8 }}>Your Name</label>
-                        <input className="input" value={name} onChange={e => { setName(e.target.value); setError(''); }} placeholder="Enter your full name" autoFocus />
+                        <input type="text" className="input" value={name} onChange={e => { setName(e.target.value); setError(''); }} placeholder="Enter your full name" autoFocus />
                     </div>
 
                     {/* Roles */}

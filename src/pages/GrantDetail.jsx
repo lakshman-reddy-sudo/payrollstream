@@ -255,7 +255,7 @@ export default function GrantDetail({ user, walletAddress }) {
                 </button>
                 {grant.teamWallet && <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-card)', border: '1px solid var(--border)', marginBottom: '1rem' }}><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Employee:</span><div className="text-mono" style={{ color: 'var(--accent)', wordBreak: 'break-all', marginTop: 2, userSelect: 'all' }}>{grant.teamWallet}</div></div>}
                 <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Transaction ID *</label>
-                <input className="input text-mono" style={{ fontSize: '0.75rem', marginBottom: '1rem' }} value={loraTxnId} onChange={e => { setLoraTxnId(e.target.value); setTxnVerified(null); }} placeholder="Paste txn ID…" />
+                <input type="text" className="input text-mono" style={{ fontSize: '0.75rem', marginBottom: '1rem' }} value={loraTxnId} onChange={e => { setLoraTxnId(e.target.value); setTxnVerified(null); }} placeholder="Paste txn ID…" />
                 {txnVerified && <div style={{ padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--success-bg)', border: '1px solid rgba(52,211,153,0.2)', color: 'var(--success)', fontSize: '0.875rem', marginBottom: '1rem' }}>✓ Verified! {txnVerified.amount} ALGO</div>}
                 <div style={{ display: 'flex', gap: 12 }}><button className="btn-primary" style={{ flex: 1, padding: '10px 0' }} onClick={handleFundGrant} disabled={verifying || !loraTxnId.trim()}>{verifying ? 'Verifying…' : 'Verify & Submit'}</button><button className="btn-outline" style={{ padding: '10px 20px' }} onClick={() => { setShowFundModal(false); setLoraTxnId(''); setTxnVerified(null); }}>Cancel</button></div>
             </Modal>
@@ -274,7 +274,7 @@ export default function GrantDetail({ user, walletAddress }) {
                     <span className="num-display" style={{ color: 'var(--text-primary)', fontWeight: 700, marginLeft: 8 }}>{showReleaseLora?.amount} ALGO</span>
                 </div>
                 <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Transaction ID *</label>
-                <input className="input text-mono" style={{ fontSize: '0.75rem', marginBottom: '1rem' }} value={loraTxnId} onChange={e => { setLoraTxnId(e.target.value); setTxnVerified(null); }} placeholder="Paste txn ID…" />
+                <input type="text" className="input text-mono" style={{ fontSize: '0.75rem', marginBottom: '1rem' }} value={loraTxnId} onChange={e => { setLoraTxnId(e.target.value); setTxnVerified(null); }} placeholder="Paste txn ID…" />
                 {txnVerified && <div style={{ padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--success-bg)', border: '1px solid rgba(52,211,153,0.2)', color: 'var(--success)', fontSize: '0.875rem', marginBottom: '1rem' }}>✓ Verified! Round #{txnVerified.confirmedRound}</div>}
                 <div style={{ display: 'flex', gap: 12 }}><button className="btn-primary" style={{ flex: 1, padding: '10px 0' }} onClick={handleSubmitReleaseTxn} disabled={verifying || !loraTxnId.trim()}>{verifying ? 'Verifying…' : 'Verify & Release'}</button><button className="btn-outline" style={{ padding: '10px 20px' }} onClick={() => { setShowReleaseLora(null); setLoraTxnId(''); setTxnVerified(null); }}>Cancel</button></div>
             </Modal>
