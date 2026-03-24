@@ -272,6 +272,9 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.9375rem;
   outline: none;
   transition: all 0.2s ease;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .input::placeholder { color: var(--text-muted); }
 .input:focus {
@@ -279,7 +282,29 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
-textarea.input { resize: vertical; min-height: 100px; }
+input.input,
+textarea.input,
+select.input {
+  display: block;
+  width: 100%;
+}
+
+textarea.input { 
+  resize: vertical; 
+  min-height: 100px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background-color: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+}
+
+input[type="text"].input {
+  background-color: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+  width: 100% !important;
+}
+
 select.input { cursor: pointer; }
 
 /* ===== NAVBAR ===== */

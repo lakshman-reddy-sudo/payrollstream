@@ -226,3 +226,11 @@ export function computeEarnedSalary(payroll) {
         rate: rate * 1000, // ALGO per second
     };
 }
+
+/**
+ * Clear all application data
+ */
+export function clearAllData() {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(AUTH_KEY);
+}

@@ -102,11 +102,14 @@ npm run build
 ## 📖 How It Works
 
 ```
-01 → Connect your Pera Wallet (optional, for display)
+01 → Connect your wallet (Pera or Defly) (optional, for display)
 02 → Create a Payroll Stream (define salary, milestones, timeline)
 03 → Submit & Verify Milestones (employee submits, admin reviews)
 04 → Release Salary On-Chain (verified Algorand transactions via Lora)
 ```
+
+### Local Data Reset
+- A **Clear All Data** button is available on the Login screen to wipe app data stored in `localStorage` (payrolls, auth, etc.).
 
 ### Payroll Lifecycle
 
@@ -182,7 +185,9 @@ PayrollStream/
 | `verifyTransaction()` | `algorand.js` | Verifies Algorand txn on TestNet |
 | `getLoraComposeUrl()` | `algorand.js` | Opens Lora transaction composer |
 | `createMultisigAddress()` | `algorand.js` | Creates multisig escrow address |
-| `connectWallet()` | `wallet.js` | Connects Pera/Defly wallet |
+| `connectWallet()` | `wallet.js` | Connects selected wallet (Pera/Defly) |
+| `getWalletTypes()` | `wallet.js` | Wallet options shown in the Login selector |
+| `clearAllData()` | `store.js` | Clears app data from `localStorage` |
 
 ---
 

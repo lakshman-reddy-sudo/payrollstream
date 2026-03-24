@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { loginUser, updateUserWallet } from '../utils/store';
-import { connectWallet } from '../utils/wallet';
+import { loginUser, updateUserWallet, clearAllData } from '../utils/store';
+import { connectWallet, getWalletTypes } from '../utils/wallet';
 import { shortAddress } from '../utils/algorand';
 
 export default function Login({ onLogin, onWalletConnect }) {
@@ -11,21 +11,39 @@ export default function Login({ onLogin, onWalletConnect }) {
     const [walletAddr, setWalletAddr] = useState('');
     const [connecting, setConnecting] = useState(false);
     const [error, setError] = useState('');
+    const [showWalletSelector, setShowWalletSelector] = useState(false);
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
 
     const roles = [
         { id: 'admin', icon: 'shield_person', label: 'Admin (Employer)', desc: 'Create payrolls, fund contracts, verify work, approve salary releases' },
         { id: 'employee', icon: 'badge', label: 'Employee', desc: 'View earned salary, submit milestones, request payouts' },
     ];
 
-    const handleConnectWallet = async () => {
+    const walletTypes = getWalletTypes();
+
+    const handleWalletSelect = async (walletType) => {
         setConnecting(true);
+        setShowWalletSelector(false);
         try {
-            const accounts = await connectWallet();
-            if (accounts.length > 0) { setWalletAddr(accounts[0]); setError(''); }
+            const accounts = await connectWallet(walletType);
+            if (accounts.length > 0) {
+                setWalletAddr(accounts[0]);
+                setError('');
+            }
         } catch (err) {
             if (err?.data?.type !== 'CONNECT_MODAL_CLOSED') setError('Wallet connection failed.');
         }
         setConnecting(false);
+    };
+
+    const handleClearData = () => {
+        clearAllData();
+        setShowClearConfirm(false);
+        setName('');
+        setRole('');
+        setWalletAddr('');
+        setError('');
+        alert('All data cleared!');
     };
 
     const handleSubmit = (e) => {
@@ -122,9 +140,9 @@ export default function Login({ onLogin, onWalletConnect }) {
                             </div>
                         ) : (
                             <button type="button" className="btn-outline" style={{ width: '100%', borderRadius: 'var(--radius-md)' }}
-                                onClick={handleConnectWallet} disabled={connecting}>
+                                onClick={() => setShowWalletSelector(true)} disabled={connecting}>
                                 {connecting ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }}></div> Connecting…</>
-                                    : <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>account_balance_wallet</span> Connect Pera Wallet</>}
+                                    : <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>account_balance_wallet</span> Connect Wallet</>}
                             </button>
                         )}
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6 }}>Transactions via Lora. Wallet is optional for display.</p>
@@ -137,6 +155,28 @@ export default function Login({ onLogin, onWalletConnect }) {
                     </button>
                 </form>
 
+                {/* Clear Data Button */}
+                <button 
+                    type="button"
+                    onClick={() => setShowClearConfirm(true)}
+                    style={{
+                        width: '100%', marginTop: '1rem', padding: '10px 0',
+                        background: 'transparent', border: '1px solid var(--error)',
+                        borderRadius: 'var(--radius-md)', color: 'var(--error)',
+                        fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer',
+                        transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(248,113,113,0.1)';
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = 'transparent';
+                    }}
+                >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 6 }}>delete_sweep</span>
+                    Clear All Data
+                </button>
+
                 <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
                     <Link to="/public" style={{ color: 'var(--accent)', fontSize: '0.8125rem', fontWeight: 600 }}>
                         View Public Dashboard →
@@ -146,6 +186,101 @@ export default function Login({ onLogin, onWalletConnect }) {
                     </p>
                 </div>
             </div>
+
+            {/* Wallet Selector Modal - Like Lora */}
+            {showWalletSelector && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1000, padding: '2rem',
+                }}>
+                    <div style={{
+                        width: '100%', maxWidth: 420,
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-xl)', padding: '2rem',
+                        boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+                        animation: 'fadeUp 0.3s ease',
+                    }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>Wallet Providers</h2>
+                            <button type="button" onClick={() => setShowWalletSelector(false)} style={{
+                                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: 'var(--text-secondary)',
+                            }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+                            </button>
+                        </div>
+
+                        {/* Wallet Options */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {walletTypes.map(wallet => (
+                                <button key={wallet.id} type="button" onClick={() => handleWalletSelect(wallet.id)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                                        padding: '14px 16px', background: 'var(--accent)', border: 'none',
+                                        borderRadius: 'var(--radius-md)', cursor: 'pointer', color: '#000',
+                                        transition: 'all 0.2s', fontSize: '0.9375rem', fontWeight: 600,
+                                    }}
+                                    onMouseEnter={e => {
+                                        e.currentTarget.style.opacity = '0.85';
+                                        e.currentTarget.style.transform = 'scale(1.02)';
+                                    }}
+                                    onMouseLeave={e => {
+                                        e.currentTarget.style.opacity = '1';
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                    }}
+                                    disabled={connecting}
+                                >
+                                    <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#000' }}>
+                                        {wallet.icon}
+                                    </span>
+                                    Connect {wallet.name}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Info Text */}
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '1.5rem', textAlign: 'center' }}>
+                            Ensure your wallet is installed and unlocked before connecting.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Clear Confirmation Modal */}
+            {showClearConfirm && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1000, padding: '2rem',
+                }}>
+                    <div style={{
+                        width: '100%', maxWidth: 400,
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-xl)', padding: '2rem',
+                        boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+                        animation: 'fadeUp 0.3s ease',
+                        textAlign: 'center',
+                    }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 56, color: 'var(--error)', marginBottom: '1rem' }}>warning</span>
+                        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Clear All Data?</h2>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+                            This will permanently delete all payrolls, transactions, and login information. This action cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                            <button type="button" onClick={() => setShowClearConfirm(false)} className="btn-outline" style={{ flex: 1, padding: '10px 0' }}>
+                                Cancel
+                            </button>
+                            <button type="button" onClick={handleClearData} className="btn-primary" style={{ flex: 1, padding: '10px 0', background: 'var(--error)' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete_sweep</span>
+                                Clear Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

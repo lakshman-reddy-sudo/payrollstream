@@ -3,6 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import { getGrant, updateGrant, updateMilestone, addTransaction, addExpense, addVote, getGrantStats, computeEarnedSalary } from '../utils/store';
 import { shortAddress, getExplorerTxnUrl, getExplorerAddrUrl, getBalance, isValidAddress, getLoraComposeUrl, verifyTransaction, LORA_BASE } from '../utils/algorand';
 
+/**
+ * GrantDetail Component - Display payroll details and milestones
+ * Fixed: Input fields now properly styled to accept full text input
+ */
 export default function GrantDetail({ user, walletAddress }) {
     const { id } = useParams();
     const [grant, setGrant] = useState(null);
@@ -160,7 +164,16 @@ export default function GrantDetail({ user, walletAddress }) {
             <Modal show={showSubmitModal} onClose={() => setShowSubmitModal(null)} title="Submit Milestone" icon="upload_file">
                 <p className="text-body-sm" style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>Submitting: <strong style={{ color: 'var(--text-primary)' }}>{showSubmitModal?.name}</strong> ({showSubmitModal?.amount} ALGO)</p>
                 <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>What you completed *</label>
-                <textarea className="input" value={submitNote} onChange={e => setSubmitNote(e.target.value)} placeholder="Describe deliverables…" style={{ marginBottom: '1rem' }} />
+                <textarea 
+                    className="input" 
+                    value={submitNote} 
+                    onChange={e => setSubmitNote(e.target.value)} 
+                    placeholder="Describe deliverables…" 
+                    style={{ marginBottom: '1rem', fontFamily: 'var(--font-sans)', overflow: 'auto', resize: 'vertical' }}
+                    rows={4}
+                    autoComplete="off"
+                    spellCheck="true"
+                />
                 <div style={{ display: 'flex', gap: 12 }}>
                     <button className="btn-primary" style={{ flex: 1, padding: '10px 0' }} onClick={() => handleSubmit(showSubmitModal)}>Submit</button>
                     <button className="btn-outline" style={{ padding: '10px 20px' }} onClick={() => setShowSubmitModal(null)}>Cancel</button>
@@ -171,7 +184,14 @@ export default function GrantDetail({ user, walletAddress }) {
             <Modal show={showRejectModal} onClose={() => setShowRejectModal(null)} title="Reject Milestone" icon="cancel">
                 <p className="text-body-sm" style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>Rejecting: <strong style={{ color: 'var(--text-primary)' }}>{showRejectModal?.name}</strong></p>
                 <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Reason *</label>
-                <textarea className="input" value={rejectNote} onChange={e => setRejectNote(e.target.value)} placeholder="What needs improvement…" style={{ marginBottom: '1rem' }} />
+                <textarea 
+                    className="input" 
+                    value={rejectNote} 
+                    onChange={e => setRejectNote(e.target.value)} 
+                    placeholder="What needs improvement…" 
+                    style={{ marginBottom: '1rem', fontFamily: 'var(--font-sans)', overflow: 'auto' }}
+                    rows={4}
+                />
                 <div style={{ display: 'flex', gap: 12 }}>
                     <button className="btn-primary" style={{ flex: 1, padding: '10px 0', background: 'var(--error)' }} onClick={() => handleReject(showRejectModal)}>Reject</button>
                     <button className="btn-outline" style={{ padding: '10px 20px' }} onClick={() => setShowRejectModal(null)}>Cancel</button>
@@ -181,11 +201,48 @@ export default function GrantDetail({ user, walletAddress }) {
             {/* Expense Modal */}
             <Modal show={showExpenseModal} onClose={() => setShowExpenseModal(false)} title="Log Expense" icon="receipt_long">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
-                    <div><label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Description *</label><input className="input" value={expense.description} onChange={e => setExpense({ ...expense, description: e.target.value })} placeholder="Development tools" /></div>
-                    <div><label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Amount (ALGO) *</label><input type="number" className="input" value={expense.amount} onChange={e => setExpense({ ...expense, amount: e.target.value })} min="0.01" step="0.01" /></div>
-                    <div><label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Category</label><select className="input" value={expense.category} onChange={e => setExpense({ ...expense, category: e.target.value })}><option>General</option><option>Hardware</option><option>Software</option><option>Services</option><option>Other</option></select></div>
+                    <div>
+                        <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Description *</label>
+                        <input 
+                            className="input" 
+                            type="text"
+                            value={expense.description} 
+                            onChange={e => setExpense({ ...expense, description: e.target.value })} 
+                            placeholder="Development tools"
+                            autoComplete="off"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Amount (ALGO) *</label>
+                        <input 
+                            type="number" 
+                            className="input" 
+                            value={expense.amount} 
+                            onChange={e => setExpense({ ...expense, amount: e.target.value })} 
+                            min="0.01" 
+                            step="0.01"
+                            autoComplete="off"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-caption" style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: 6 }}>Category</label>
+                        <select 
+                            className="input" 
+                            value={expense.category} 
+                            onChange={e => setExpense({ ...expense, category: e.target.value })}
+                        >
+                            <option>General</option>
+                            <option>Hardware</option>
+                            <option>Software</option>
+                            <option>Services</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: 12 }}><button className="btn-primary" style={{ flex: 1, padding: '10px 0' }} onClick={handleLogExpense}>Log</button><button className="btn-outline" style={{ padding: '10px 20px' }} onClick={() => setShowExpenseModal(false)}>Cancel</button></div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                    <button className="btn-primary" style={{ flex: 1, padding: '10px 0' }} onClick={handleLogExpense}>Log</button>
+                    <button className="btn-outline" style={{ padding: '10px 20px' }} onClick={() => setShowExpenseModal(false)}>Cancel</button>
+                </div>
             </Modal>
 
             {/* Fund Modal */}
